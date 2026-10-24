@@ -1,0 +1,18 @@
+{
+  "channel": "stable",
+  "versionName": "0.2.6",
+  "versionCode": 14,
+  "isReady": true,
+  "minVersionCode": 1,
+  "releaseNotes": "发布 STmall 0.2.6，修正应用内更新地址并补充完整文档。",
+  "releaseUrl": "https://github.com/Yunanriv-hub/STmall/releases/tag/v0.2.6",
+  "assets": [
+    {
+      "type": "apk",
+      "platform": "android",
+      "url": "https://github.com/Yunanriv-hub/STmall/releases/download/v0.2.6/STmall_0.2.6.apk",
+      "sha256": "b4793226d11372c422cdc5d7af29a3740d3aac78de3915a39bd45d29f92cef70",
+      "size": 9064546
+    }
+  ]
+}

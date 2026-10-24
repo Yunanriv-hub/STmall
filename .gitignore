@@ -1,0 +1,43 @@
+# Android / Gradle build output
+.gradle-home/
+.android-home/
+.tmp/
+android/.gradle/
+android/.kotlin/
+android/build/
+android/app/build/
+android/local.properties
+
+# Signing material - never publish
+android/keystore.properties
+*.jks
+*.keystore
+*.p12
+*.pem
+
+# Release binaries are uploaded to GitHub Releases, not committed
+*.apk
+*.aab
+
+# Local reference checkout and unsanitized device-test evidence
+reference/
+screenshots/
+tools/OcrWin.ps1
+
+# IDE and operating-system metadata
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+
+# User data and credentials
+cookies*.json
+*cookies*.json
+credentials*.json
+*.credentials
+activation*.json
+
+# Logs and temporary files
+*.log
+*.tmp
