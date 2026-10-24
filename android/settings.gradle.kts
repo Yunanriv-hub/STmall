@@ -14,6 +14,7 @@ dependencyResolutionManagement {
     repositories {
         maven("https://maven.aliyun.com/repository/google")
         maven("https://maven.aliyun.com/repository/central")
+        maven("https://jitpack.io")
         google()
         mavenCentral()
     }
@@ -21,3 +22,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "STmall"
 include(":app")
+include(":life798")

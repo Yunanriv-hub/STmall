@@ -1,20 +1,26 @@
 package com.fktm.app.ui
 
+import android.animation.ValueAnimator
+import android.os.Build
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -30,13 +36,19 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,30 +58,48 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kyant.backdrop.backdrops.LayerBackdrop
+import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.backdrop.drawBackdrop
+import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.effects.vibrancy
+import com.kyant.backdrop.highlight.Highlight
+import com.kyant.backdrop.shadow.Shadow
 import kotlin.math.hypot
+import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.roundToInt
+
+internal val LocalLiquidGlassBackdrop = staticCompositionLocalOf<LayerBackdrop?> { null }
 
 /**
- * Compatible Liquid Glass adaptation.
+ * Liquid Glass surface supplied by Kyant0/Backdrop (Apache-2.0).
  *
- * The interaction layers follow the backdrop/highlight/lens composition used by
- * Kyant0/AndroidLiquidGlass (Apache-2.0), implemented with the Compose version
- * already used by this app so minSdk 26 remains supported.
+ * API 31+ samples and blurs the real page behind the surface; API 33+ also
+ * applies the rounded-rectangle lens. Older devices keep the lightweight
+ * optical fallback so minSdk 26 behavior remains unchanged.
  */
 @Composable
 internal fun LiquidGlassTopActions(
@@ -89,6 +119,7 @@ internal fun LiquidGlassTopActions(
             GlassIconButton(
                 glyph = if (darkTheme) "☀" else "☾",
                 description = if (darkTheme) "切换到日间模式" else "切换到纯黑暗黑模式",
+                darkTheme = darkTheme,
                 enabled = enabled,
                 onClick = onThemeToggle,
             )
@@ -96,6 +127,7 @@ internal fun LiquidGlassTopActions(
         GlassIconButton(
             glyph = "⚙",
             description = "打开界面设置",
+            darkTheme = darkTheme,
             enabled = enabled,
             onClick = { onSettings() },
         )
@@ -106,11 +138,14 @@ internal fun LiquidGlassTopActions(
 private fun GlassIconButton(
     glyph: String,
     description: String,
+    darkTheme: Boolean,
     enabled: Boolean,
     onClick: (Offset) -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
+    val backdrop = LocalLiquidGlassBackdrop.current
+    val useNativeGlass = backdrop != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val scale by animateFloatAsState(
         targetValue = if (pressed) 0.9f else 1f,
         animationSpec = spring(stiffness = 650f, dampingRatio = 0.68f),
@@ -119,19 +154,55 @@ private fun GlassIconButton(
     var center by remember { mutableStateOf(Offset.Zero) }
     val topColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.68f)
     val bottomColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.34f)
-
-    Box(
+    val surfaceModifier = if (useNativeGlass) {
+        Modifier.drawBackdrop(
+            backdrop = backdrop!!,
+            shape = { CircleShape },
+            effects = {
+                vibrancy()
+                blur(4.dp.toPx())
+                lens(
+                    refractionHeight = 9.dp.toPx(),
+                    refractionAmount = 16.dp.toPx(),
+                    depthEffect = true,
+                    chromaticAberration = true,
+                )
+            },
+            highlight = { Highlight.Ambient.copy(alpha = 0.82f) },
+            shadow = {
+                Shadow.Default.copy(
+                    radius = 12.dp,
+                    color = Color.Black.copy(alpha = 0.2f),
+                )
+            },
+            layerBlock = {
+                scaleX = scale
+                scaleY = scale
+            },
+            onDrawSurface = {
+                drawRect(
+                    Brush.verticalGradient(
+                        listOf(
+                            Color.White.copy(alpha = if (darkTheme) 0.08f else 0.16f),
+                            topColor.copy(alpha = if (darkTheme) 0.16f else 0.14f),
+                            bottomColor.copy(alpha = if (darkTheme) 0.12f else 0.1f),
+                        )
+                    )
+                )
+                drawRect(
+                    Brush.radialGradient(
+                        listOf(Color.White.copy(alpha = 0.2f), Color.Transparent),
+                        center = Offset(size.width * 0.25f, 0f),
+                        radius = size.maxDimension * 0.9f,
+                    )
+                )
+            },
+        )
+    } else {
         Modifier
-            .size(46.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
-            }
-            .onGloballyPositioned { coordinates ->
-                center = coordinates.positionInRoot() + Offset(
-                    coordinates.size.width / 2f,
-                    coordinates.size.height / 2f,
-                )
             }
             .shadow(
                 elevation = 10.dp,
@@ -147,6 +218,18 @@ private fun GlassIconButton(
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.16f),
                 shape = CircleShape,
             )
+    }
+
+    Box(
+        Modifier
+            .size(46.dp)
+            .then(surfaceModifier)
+            .onGloballyPositioned { coordinates ->
+                center = coordinates.positionInRoot() + Offset(
+                    coordinates.size.width / 2f,
+                    coordinates.size.height / 2f,
+                )
+            }
             .semantics {
                 contentDescription = description
                 role = Role.Button
@@ -187,22 +270,98 @@ internal fun LiquidGlassBottomBar(
     val shape = RoundedCornerShape(percent = 50)
     val surface = MaterialTheme.colorScheme.surface
     val accent = MaterialTheme.colorScheme.primary
+    val profileAccent = if (darkTheme) Color(0xFF8AB4F8) else Color(0xFF356EA8)
+    val density = LocalDensity.current
+    val animationsEnabled = ValueAnimator.areAnimatorsEnabled()
     val borderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f)
+    val backdrop = LocalLiquidGlassBackdrop.current
+    val useNativeGlass = backdrop != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    var dragPosition by remember { mutableFloatStateOf(selectedIndex.toFloat()) }
+    var isDragging by remember { mutableStateOf(false) }
+    var suppressClicksUntil by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(selectedIndex, isDragging) {
+        if (!isDragging) dragPosition = selectedIndex.toFloat()
+    }
+    val animatedPosition by animateFloatAsState(
+        targetValue = dragPosition,
+        animationSpec = if (isDragging || !animationsEnabled) {
+            snap()
+        } else {
+            spring(stiffness = 430f, dampingRatio = 0.72f)
+        },
+        label = "glass-tab-drag-position",
+    )
+    val activeAccent = lerp(accent, profileAccent, animatedPosition.coerceIn(0f, 1f))
+    val dragDistance = (animatedPosition - selectedIndex).coerceIn(-1f, 1f)
+    val barTranslationPx = with(density) { (3.dp * dragDistance).toPx() }
+    val barStretch = abs(dragDistance)
+    val lensStretch by animateFloatAsState(
+        targetValue = if (isDragging) 0.035f else 0f,
+        animationSpec = if (animationsEnabled) {
+            spring(stiffness = 620f, dampingRatio = 0.68f)
+        } else {
+            snap()
+        },
+        label = "glass-tab-lens-stretch",
+    )
+    val tabsBackdrop = rememberLayerBackdrop()
+    val selectedBackdrop = if (useNativeGlass) {
+        rememberCombinedBackdrop(backdrop!!, tabsBackdrop)
+    } else {
+        null
+    }
     val glassBrush = Brush.verticalGradient(
         colors = if (darkTheme) {
             listOf(
-                Color(0xFF333A37).copy(alpha = 0.62f),
-                Color(0xFF171B19).copy(alpha = 0.5f),
-                Color(0xFF090B0A).copy(alpha = 0.68f),
+                Color(0xFF333A37).copy(alpha = if (useNativeGlass) 0.32f else 0.62f),
+                Color(0xFF171B19).copy(alpha = if (useNativeGlass) 0.2f else 0.5f),
+                Color(0xFF090B0A).copy(alpha = if (useNativeGlass) 0.24f else 0.68f),
             )
         } else {
             listOf(
-                Color.White.copy(alpha = 0.78f),
-                surface.copy(alpha = 0.56f),
-                surface.copy(alpha = 0.72f),
+                Color.White.copy(alpha = if (useNativeGlass) 0.34f else 0.78f),
+                surface.copy(alpha = if (useNativeGlass) 0.2f else 0.56f),
+                surface.copy(alpha = if (useNativeGlass) 0.22f else 0.72f),
             )
         }
     )
+    val baseSurfaceModifier = if (useNativeGlass) {
+        Modifier.drawBackdrop(
+            backdrop = backdrop!!,
+            shape = { shape },
+            effects = {
+                vibrancy()
+                blur(5.dp.toPx())
+                lens(
+                    refractionHeight = 16.dp.toPx(),
+                    refractionAmount = 26.dp.toPx(),
+                    depthEffect = true,
+                    chromaticAberration = true,
+                )
+            },
+            highlight = { Highlight.Ambient },
+            shadow = {
+                Shadow.Default.copy(
+                    radius = 18.dp,
+                    color = Color.Black.copy(alpha = 0.22f),
+                )
+            },
+            exportedBackdrop = tabsBackdrop,
+            onDrawSurface = { drawRect(glassBrush) },
+        )
+    } else {
+        Modifier
+            .shadow(
+                elevation = 18.dp,
+                shape = shape,
+                clip = false,
+                ambientColor = Color.Black.copy(alpha = 0.2f),
+                spotColor = accent.copy(alpha = 0.2f),
+            )
+            .clip(shape)
+            .background(glassBrush)
+            .border(1.dp, borderColor, shape)
+    }
 
     Box(
         modifier
@@ -220,43 +379,105 @@ internal fun LiquidGlassBottomBar(
             BoxWithConstraints(
                 Modifier
                     .fillMaxSize()
-                    .shadow(
-                        elevation = 18.dp,
-                        shape = shape,
-                        clip = false,
-                        ambientColor = Color.Black.copy(alpha = 0.2f),
-                        spotColor = accent.copy(alpha = 0.2f),
-                    )
-                    .clip(shape)
-                    .background(glassBrush)
-                    .border(1.dp, borderColor, shape),
+                    .then(baseSurfaceModifier)
+                    .graphicsLayer {
+                        translationX = barTranslationPx
+                        scaleX = 1f + barStretch * 0.008f
+                        scaleY = 1f - barStretch * 0.004f
+                    }
+                    .pointerInput(selectedIndex) {
+                        val tabWidthPx = (size.width / 2f).coerceAtLeast(1f)
+                        detectHorizontalDragGestures(
+                            onDragStart = {
+                                isDragging = true
+                                suppressClicksUntil = Long.MAX_VALUE
+                            },
+                            onHorizontalDrag = { change, dragAmount ->
+                                change.consume()
+                                dragPosition = (
+                                    dragPosition + dragAmount / tabWidthPx
+                                ).coerceIn(0f, 1f)
+                            },
+                            onDragCancel = {
+                                dragPosition = selectedIndex.toFloat()
+                                isDragging = false
+                                suppressClicksUntil = System.currentTimeMillis() + 250L
+                            },
+                            onDragEnd = {
+                                val target = if (dragPosition >= 0.5f) 1 else 0
+                                dragPosition = target.toFloat()
+                                isDragging = false
+                                suppressClicksUntil = System.currentTimeMillis() + 250L
+                                if (target != selectedIndex) onSelected(target)
+                            },
+                        )
+                    },
             ) {
                 val tabWidth = maxWidth / 2
-                val indicatorOffset by animateDpAsState(
-                    targetValue = if (selectedIndex == 0) 6.dp else tabWidth + 6.dp,
-                    animationSpec = spring(stiffness = 420f, dampingRatio = 0.72f),
-                    label = "glass-tab-position",
-                )
+                val indicatorOffset = with(density) {
+                    (tabWidth * animatedPosition + 6.dp).roundToPx()
+                }
                 val selectedBrush = Brush.horizontalGradient(
                     listOf(
-                        accent.copy(alpha = if (darkTheme) 0.45f else 0.3f),
-                        accent.copy(alpha = if (darkTheme) 0.22f else 0.16f),
+                        activeAccent.copy(alpha = if (darkTheme) 0.48f else 0.34f),
+                        lerp(activeAccent, surface, 0.24f)
+                            .copy(alpha = if (darkTheme) 0.2f else 0.14f),
                     )
                 )
-
-                Box(
+                Canvas(Modifier.matchParentSize()) {
+                    val glowCenter = Offset(
+                        x = size.width * (animatedPosition + 0.5f) / 2f,
+                        y = size.height * 0.5f,
+                    )
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            listOf(activeAccent.copy(alpha = 0.24f), Color.Transparent),
+                            center = glowCenter,
+                            radius = size.width * 0.34f,
+                        ),
+                        radius = size.width * 0.34f,
+                        center = glowCenter,
+                    )
+                }
+                val indicatorSurface = if (selectedBackdrop != null) {
+                    Modifier.drawBackdrop(
+                        backdrop = selectedBackdrop,
+                        shape = { shape },
+                        effects = {
+                            blur(1.5.dp.toPx())
+                            lens(
+                                refractionHeight = 11.dp.toPx(),
+                                refractionAmount = 20.dp.toPx(),
+                                depthEffect = true,
+                                chromaticAberration = true,
+                            )
+                        },
+                        highlight = { Highlight.Ambient.copy(alpha = 0.9f) },
+                        shadow = null,
+                        onDrawSurface = { drawRect(selectedBrush) },
+                    )
+                } else {
                     Modifier
-                        .offset { IntOffset(indicatorOffset.roundToPx(), 0) }
-                        .width(tabWidth - 12.dp)
-                        .fillMaxHeight()
-                        .padding(vertical = 6.dp)
                         .clip(shape)
                         .background(selectedBrush)
                         .border(
                             1.dp,
                             Color.White.copy(alpha = if (darkTheme) 0.17f else 0.5f),
                             shape,
-                        ),
+                        )
+                }
+
+                Box(
+                    Modifier
+                        .offset { IntOffset(indicatorOffset, 0) }
+                        .width(tabWidth - 12.dp)
+                        .fillMaxHeight()
+                        .padding(vertical = 6.dp)
+                        .graphicsLayer {
+                            scaleX = 1f + lensStretch
+                            scaleY = 1f - lensStretch * 0.28f
+                        }
+                        .then(indicatorSurface),
                 ) {
                     Box(
                         Modifier
@@ -276,16 +497,28 @@ internal fun LiquidGlassBottomBar(
                     GlassTab(
                         modifier = Modifier.weight(1f),
                         selected = selectedIndex == 0,
+                        selectionProgress = (1f - abs(animatedPosition - 0f)).coerceIn(0f, 1f),
+                        accentColor = accent,
                         label = "首页",
-                        onClick = { onSelected(0) },
+                        onClick = {
+                            if (System.currentTimeMillis() >= suppressClicksUntil) {
+                                onSelected(0)
+                            }
+                        },
                     ) {
                         HomeGlyph(it)
                     }
                     GlassTab(
                         modifier = Modifier.weight(1f),
                         selected = selectedIndex == 1,
+                        selectionProgress = (1f - abs(animatedPosition - 1f)).coerceIn(0f, 1f),
+                        accentColor = profileAccent,
                         label = "我的",
-                        onClick = { onSelected(1) },
+                        onClick = {
+                            if (System.currentTimeMillis() >= suppressClicksUntil) {
+                                onSelected(1)
+                            }
+                        },
                     ) {
                         ProfileGlyph(it)
                     }
@@ -299,6 +532,8 @@ internal fun LiquidGlassBottomBar(
 private fun GlassTab(
     modifier: Modifier,
     selected: Boolean,
+    selectionProgress: Float,
+    accentColor: Color,
     label: String,
     onClick: () -> Unit,
     icon: @Composable (Color) -> Unit,
@@ -310,22 +545,24 @@ private fun GlassTab(
         animationSpec = spring(stiffness = 700f, dampingRatio = 0.62f),
         label = "glass-tab-press",
     )
-    val color = if (selected) {
-        MaterialTheme.colorScheme.onSurface
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f)
-    }
+    val color = lerp(
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
+        accentColor,
+        selectionProgress,
+    )
+    val selectedScale = 0.96f + selectionProgress * 0.04f
 
     Box(
         modifier
             .fillMaxHeight()
             .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
+                scaleX = scale * selectedScale
+                scaleY = scale * selectedScale
             }
             .semantics {
                 contentDescription = label
                 role = Role.Tab
+                this.selected = selected
             }
             .clickable(
                 interactionSource = interaction,
@@ -343,7 +580,7 @@ private fun GlassTab(
             Text(
                 label,
                 fontSize = 12.sp,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                fontWeight = if (selectionProgress >= 0.5f) FontWeight.Bold else FontWeight.Medium,
                 color = color,
             )
         }
@@ -389,6 +626,266 @@ private fun ProfileGlyph(color: Color) {
     }
 }
 
+@Composable
+internal fun LiquidGlassPanel(
+    modifier: Modifier = Modifier,
+    shape: Shape = RoundedCornerShape(24.dp),
+    contentPadding: PaddingValues = PaddingValues(0.dp),
+    content: @Composable BoxScope.() -> Unit,
+) {
+    val surface = MaterialTheme.colorScheme.surface
+    val container = MaterialTheme.colorScheme.primary
+    val backdrop = LocalLiquidGlassBackdrop.current
+    val useNativeGlass = backdrop != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val glass = Brush.verticalGradient(
+        listOf(
+            surface.copy(alpha = if (useNativeGlass) 0.42f else 0.82f),
+            surface.copy(alpha = if (useNativeGlass) 0.2f else 0.58f),
+            MaterialTheme.colorScheme.background.copy(
+                alpha = if (useNativeGlass) 0.24f else 0.72f
+            ),
+        )
+    )
+    val surfaceModifier = if (useNativeGlass) {
+        Modifier.drawBackdrop(
+            backdrop = backdrop!!,
+            shape = { shape },
+            effects = {
+                vibrancy()
+                blur(4.dp.toPx())
+                lens(
+                    refractionHeight = 15.dp.toPx(),
+                    refractionAmount = 26.dp.toPx(),
+                    depthEffect = true,
+                    chromaticAberration = true,
+                )
+            },
+            highlight = { Highlight.Ambient },
+            shadow = {
+                Shadow.Default.copy(
+                    radius = 16.dp,
+                    color = Color.Black.copy(alpha = 0.18f),
+                )
+            },
+            onDrawSurface = {
+                drawRect(glass)
+                drawRect(
+                    Brush.radialGradient(
+                        listOf(Color.White.copy(alpha = 0.16f), Color.Transparent),
+                        center = Offset(size.width * 0.16f, 0f),
+                        radius = size.maxDimension * 0.9f,
+                    )
+                )
+            },
+        )
+    } else {
+        Modifier
+            .shadow(
+                elevation = 16.dp,
+                shape = shape,
+                clip = false,
+                ambientColor = Color.Black.copy(alpha = 0.18f),
+                spotColor = container.copy(alpha = 0.2f),
+            )
+            .clip(shape)
+            .background(glass)
+            .border(1.dp, Color.White.copy(alpha = 0.2f), shape)
+    }
+    Box(
+        modifier
+            .then(surfaceModifier)
+    ) {
+        if (!useNativeGlass) {
+            Canvas(Modifier.matchParentSize()) {
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        listOf(Color.White.copy(alpha = 0.2f), Color.Transparent),
+                        endY = size.height * 0.62f,
+                    )
+                )
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        listOf(container.copy(alpha = 0.14f), Color.Transparent),
+                        center = Offset(size.width * 0.18f, size.height * 0.5f),
+                        radius = size.maxDimension * 0.72f,
+                    ),
+                    center = Offset(size.width * 0.18f, size.height * 0.5f),
+                    radius = size.maxDimension * 0.72f,
+                )
+            }
+        }
+        CompositionLocalProvider(
+            LocalContentColor provides MaterialTheme.colorScheme.onSurface
+        ) {
+            Box(Modifier.padding(contentPadding), content = content)
+        }
+    }
+}
+
+@Composable
+internal fun LiquidGlassAmbientBackground(
+    darkTheme: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val primary = MaterialTheme.colorScheme.primary
+    val secondary = MaterialTheme.colorScheme.secondary
+    val tertiary = MaterialTheme.colorScheme.tertiary
+    Canvas(modifier.fillMaxSize()) {
+        val primaryAlpha = if (darkTheme) 0.11f else 0.24f
+        val secondaryAlpha = if (darkTheme) 0.085f else 0.18f
+        val tertiaryAlpha = if (darkTheme) 0.06f else 0.14f
+        drawCircle(
+            brush = Brush.radialGradient(
+                listOf(primary.copy(alpha = primaryAlpha), Color.Transparent),
+                center = Offset(size.width * 0.12f, size.height * 0.2f),
+                radius = size.width * 0.8f,
+            ),
+            radius = size.width * 0.8f,
+            center = Offset(size.width * 0.12f, size.height * 0.2f),
+        )
+        drawCircle(
+            brush = Brush.radialGradient(
+                listOf(secondary.copy(alpha = secondaryAlpha), Color.Transparent),
+                center = Offset(size.width * 0.92f, size.height * 0.58f),
+                radius = size.width * 0.72f,
+            ),
+            radius = size.width * 0.72f,
+            center = Offset(size.width * 0.92f, size.height * 0.58f),
+        )
+        drawCircle(
+            brush = Brush.radialGradient(
+                listOf(tertiary.copy(alpha = tertiaryAlpha), Color.Transparent),
+                center = Offset(size.width * 0.24f, size.height * 0.96f),
+                radius = size.width * 0.66f,
+            ),
+            radius = size.width * 0.66f,
+            center = Offset(size.width * 0.24f, size.height * 0.96f),
+        )
+
+        val bubbles = listOf(
+            Offset(size.width * 0.11f, size.height * 0.28f) to size.width * 0.09f,
+            Offset(size.width * 0.84f, size.height * 0.18f) to size.width * 0.055f,
+            Offset(size.width * 0.78f, size.height * 0.42f) to size.width * 0.075f,
+            Offset(size.width * 0.23f, size.height * 0.57f) to size.width * 0.06f,
+            Offset(size.width * 0.92f, size.height * 0.66f) to size.width * 0.1f,
+            Offset(size.width * 0.42f, size.height * 0.8f) to size.width * 0.05f,
+            Offset(size.width * 0.14f, size.height * 0.92f) to size.width * 0.075f,
+            Offset(size.width * 0.52f, size.height * 0.6f) to size.width * 0.08f,
+        )
+        val bubbleAlpha = if (darkTheme) 0.08f else 0.14f
+        bubbles.forEachIndexed { index, (center, bubbleRadius) ->
+            val color = when (index % 3) {
+                0 -> primary
+                1 -> secondary
+                else -> tertiary
+            }
+            drawCircle(
+                brush = Brush.radialGradient(
+                    listOf(
+                        Color.White.copy(alpha = bubbleAlpha * 0.9f),
+                        color.copy(alpha = bubbleAlpha),
+                        Color.Transparent,
+                    ),
+                    center = center,
+                    radius = bubbleRadius,
+                ),
+                radius = bubbleRadius,
+                center = center,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun LiquidGlassIconDisc(
+    discSize: Dp,
+    modifier: Modifier = Modifier,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    val backdrop = LocalLiquidGlassBackdrop.current
+    val useNativeGlass = backdrop != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val surface = MaterialTheme.colorScheme.surface
+    val surfaceModifier = if (useNativeGlass) {
+        Modifier.drawBackdrop(
+            backdrop = backdrop!!,
+            shape = { CircleShape },
+            effects = {
+                vibrancy()
+                blur(2.5.dp.toPx())
+                lens(
+                    refractionHeight = 8.dp.toPx(),
+                    refractionAmount = 16.dp.toPx(),
+                    depthEffect = true,
+                    chromaticAberration = true,
+                )
+            },
+            highlight = { Highlight.Ambient.copy(alpha = 0.78f) },
+            shadow = {
+                Shadow.Default.copy(
+                    radius = 8.dp,
+                    color = Color.Black.copy(alpha = 0.12f),
+                )
+            },
+            onDrawSurface = {
+                drawRect(surface.copy(alpha = 0.18f))
+                drawRect(
+                    Brush.radialGradient(
+                        listOf(Color.White.copy(alpha = 0.2f), Color.Transparent),
+                        center = Offset(size.width * 0.2f, 0f),
+                        radius = size.maxDimension * 0.9f,
+                    )
+                )
+            },
+        )
+    } else {
+        Modifier
+            .clip(CircleShape)
+            .background(surface.copy(alpha = 0.78f))
+            .border(
+                1.dp,
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                CircleShape,
+            )
+    }
+    Box(
+        modifier
+            .size(discSize)
+            .then(surfaceModifier),
+        contentAlignment = Alignment.Center,
+        content = content,
+    )
+}
+
+@Composable
+internal fun LiquidGlassHeader(
+    title: String,
+    subtitle: String,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LiquidGlassPanel(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+    ) {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            TextButton(onClick = onBack) { Text("‹ 返回") }
+            Column(Modifier.weight(1f)) {
+                Text(title, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    subtitle,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
 internal data class ThemeRevealSpec(
     val id: Long,
     val center: Offset,
@@ -407,6 +904,11 @@ internal fun ThemeRevealOverlay(
     val accent = MaterialTheme.colorScheme.primary
 
     LaunchedEffect(spec.id) {
+        if (!ValueAnimator.areAnimatorsEnabled()) {
+            onCovered()
+            onFinished()
+            return@LaunchedEffect
+        }
         reveal.animateTo(
             targetValue = 1f,
             animationSpec = tween(420, easing = FastOutSlowInEasing),

@@ -1,0 +1,7 @@
+# Copy to life798.properties and fill values for the signed endpoints you own.
+# Keep this file local. Build output must not be redistributed with these values.
+API_GATEWAY=https://cloud.hnkzy.com/api/v1
+SIGN_SALT=
+APP_SIGN_SALT=
+MINI_SIGN_SALT=
+API_CID=

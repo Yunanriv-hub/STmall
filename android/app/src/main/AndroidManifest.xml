@@ -17,6 +17,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- 扫饮水机二维码 -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.NFC" />
     <!-- 抓取期间的前台服务：App 要退到后台，必须靠它把进程顶到前台优先级，
          否则会被 ColorOS 之类的系统冻结，Shizuku 的 binder 回调直接断掉。 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -29,6 +30,8 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
+    <!-- NFC 是增强入口，不应阻止无 NFC 手机安装其他功能 -->
+    <uses-feature android:name="android.hardware.nfc" android:required="false" />
     <!-- 相机只是扫码用，没有也能装（可手输设备号） -->
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
@@ -47,7 +50,60 @@
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
         android:theme="@style/Theme.FkTM"
-        tools:targetApi="34">
+        tools:targetApi="34"
+        tools:replace="android:theme">
+
+        <activity
+            android:name=".nfc.NfcTagActivity"
+            android:exported="true"
+            android:label="慧生活 NFC"
+            android:launchMode="singleTop"
+            android:screenOrientation="portrait">
+            <intent-filter>
+                <action android:name="android.nfc.action.NDEF_DISCOVERED" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data
+                    android:scheme="https"
+                    android:host="i.ilife798.com"
+                    android:pathPrefix="/nfc.html" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.nfc.action.NDEF_DISCOVERED" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data
+                    android:scheme="https"
+                    android:host="i.hnkzy.com"
+                    android:pathPrefix="/nfc.html" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.nfc.action.NDEF_DISCOVERED" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data
+                    android:scheme="https"
+                    android:host="act.hnkzy.com"
+                    android:pathPrefix="/nfc.html" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.nfc.action.NDEF_DISCOVERED" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data
+                    android:scheme="https"
+                    android:host="act2.hnkzy.com"
+                    android:pathPrefix="/nfc.html" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.nfc.action.NDEF_DISCOVERED" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/com.cloudora.android" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.nfc.action.TECH_DISCOVERED" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <meta-data
+                android:name="android.nfc.action.TECH_DISCOVERED"
+                android:resource="@xml/nfc_tech_filter" />
+        </activity>
 
         <activity
             android:name=".MainActivity"

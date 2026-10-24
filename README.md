@@ -13,12 +13,13 @@
   </p>
 </div>
 
-> **STmall 是非官方个人项目，与天猫、淘宝、阿里巴巴及其关联公司没有隶属、
-> 授权或合作关系。请仅使用自己的账号，并只操作自己有权使用的门锁和设备。**
+> **STmall 是非官方个人项目，与天猫、淘宝、阿里巴巴、慧生活798及其关联
+> 服务商没有隶属、授权或合作关系。请仅使用自己的账号，并只操作自己有权使用
+> 的门锁和设备。**
 
-STmall 将智能宿舍、校园饮水、扫一扫和蓝牙门锁等高频入口集中到一个无广告
-首页，同时保留官方天猫校园的账号、订单与地址能力。项目不会修改、注入或
-重新签名官方应用。
+STmall 将天猫校园的智能宿舍、蓝牙门锁、校园饮水，以及慧生活798的多账户、
+钱包、积分、账单、设备标签等高频入口集中到一个无广告首页。项目不会修改、
+注入或重新签名官方应用。
 
 ## 界面预览
 
@@ -31,19 +32,30 @@ STmall 将智能宿舍、校园饮水、扫一扫和蓝牙门锁等高频入口�
 - 首页只保留“首页”和“我的”两个主入口，支持日间、跟随系统和纯黑暗黑模式。
 - “智能宿舍”“扫一扫”“一键开门”模块可独立显示或隐藏，首页自动重排。
 - 自绘矢量图标与自适应布局，兼容不同屏幕尺寸、字体缩放和系统栏高度。
-- 底部液态玻璃导航栏使用单层纵向玻璃背景、圆角高光、弹性胶囊和按压反馈。
+- 底部液态玻璃导航栏通过官方 Backdrop 采样页面背景，叠加模糊、圆角透镜、
+  高光、弹性胶囊和按压反馈。
+- 底部胶囊支持跟手拖动、选中渐变和弹簧吸附，切换后执行滑入滑出动画。
 - 支持从本机官方天猫校园导入已有登录态，用于校园身份校验与饮水服务。
 - 支持校园饮水设备识别、只读状态查询与接水操作。
 - 支持抓取自己门锁的凭证、Keystore 加密保存、离线蓝牙开门和电量查询。
+- 支持慧生活798多账户、独立用水/积分登录、设备启停和收藏设备同步。
+- 支持慧生活钱包余额、充值、积分签到、任务执行与消费账单。
+- STmall“我的”使用“天猫校园 / 慧生活”双入口，分别进入两套账户与服务。
+- 首页、 “我的”和模块子页统一使用液态玻璃组件与弹簧按压反馈。
+- Android 12 及以上使用真实背景模糊，Android 13 及以上启用透镜折射；
+  Android 8–11 自动使用轻量玻璃回退。
+- 支持 NFC NfcA/Ndef 标签读写，以及 `i.ilife798.com/nfc.html` 碰一碰入口。
+- 支持慧生活桌面小部件和“启动设备”快捷设置磁贴。
 - “我的订单”“地址管理”通过官方深链打开对应官方页面。
 - 提供下拉快捷磁贴和桌面开锁快捷方式。
-- 登录 Cookie 与门锁凭证不进入系统备份，源码和 Release 不包含真实凭证。
+- 登录 Cookie、慧生活账户、Token 与门锁凭证不进入系统备份。
 
 ## 系统要求
 
 - Android 8.0 或更高版本，`minSdk 26`。
 - 设备支持 Bluetooth LE；门锁功能还要求手机蓝牙已开启并位于门锁附近。
-- 官方天猫校园客户端现有可用账号。
+- 官方天猫校园或慧生活798现有可用账号。
+- NFC 功能要求手机支持 NFC；不支持 NFC 的手机仍可使用其他模块。
 - Shizuku 用于首次同步登录态、读取日志或抓取门锁凭证。
 - 不需要已保存凭证后的日常离线开门权限，也不要求修改 Root 或系统分区。
 
@@ -53,11 +65,29 @@ STmall 将智能宿舍、校园饮水、扫一扫和蓝牙门锁等高频入口�
 2. 安装并登录官方天猫校园。
 3. 安装 Shizuku，根据系统版本通过 USB ADB 或无线调试启动它。
 4. 在 Shizuku 中授权包名 `com.rea.campuslite`。
-5. 打开 STmall，在“我的”中同步官方登录。
-6. 进入“智能宿舍”，按需配置门锁凭证或选择饮水设备。
+5. 打开 STmall，在“我的”中同步官方天猫校园登录。
+6. 进入“慧生活”，完成自己的慧生活用水登录并按需添加设备。
+7. 进入“智能宿舍”，按需配置门锁凭证或选择天猫校园饮水设备。
+8. NFC 手机可从首页进入“NFC 碰一碰”，读取或写入自己的设备标签。
 
 完整的无 Root 登录导入、门锁首次录入、饮水扫码和故障排查步骤见
 [使用教程](docs/USAGE.md)。
+
+## 慧生活与 NFC
+
+慧生活功能作为 STmall 内的独立模块构建，包名仍为 `com.rea.campuslite`，
+不是一个需要另行安装的应用。账户和 Token 使用 Android Keystore AES-GCM
+加密，设备与账户列表不会以明文写入 SharedPreferences。
+
+NFC 支持原版慧生活设备标签格式：
+
+```text
+https://i.ilife798.com/nfc.html?q=<设备编号>
+```
+
+碰一碰读取后可把设备编号直接带入“添加到慧生活”页面。写入前必须确认标签属于
+自己有权管理的设备。当前版本只实现 NfcA/Ndef 标签读写，不包含云卡模拟、
+HCE APDU 或第三方门禁卡复制。
 
 ## 无 Root 登录态导入
 
@@ -125,24 +155,31 @@ android/app/build/outputs/apk/release/app-release.apk
 `android/keystore.properties` 并按自己的密钥签名；该文件、JKS/Keystore
 和构建产物均已加入 `.gitignore`。
 
+慧生活签名接口需要本地 `android/life798.properties`。可从
+[`life798.properties.example`](android/life798.properties.example) 复制后，
+填写你有权使用的本机配置。该文件已被 Git 忽略，不得随源码或 Release 分发。
+
 ## 当前版本
 
 | 项目 | 值 |
 |---|---|
-| 版本 | `0.2.6` |
-| versionCode | `14` |
+| 版本 | `0.3.4` |
+| versionCode | `19` |
 | 包名 | `com.rea.campuslite` |
 | minSdk | `26` |
 | targetSdk | `36` |
-| Release APK | `STmall_0.2.6.apk` |
-| SHA-256 | `B4793226D11372C422CDC5D7AF29A3740D3AAC78DE3915A39BD45D29F92CEF70` |
+| Release APK | `STmall_0.3.4.apk` |
+| SHA-256 | `280B079D96F0588CA1908E27E766FFDE87075CA6EB550DB699E5AC2C5FA6CF20` |
 
-该版本已通过 67 项 JVM 单元测试、release 编译、Android Lint 和 v2 签名校验。
+该版本已通过 264 项 JVM 单元测试、release 编译、Android Lint 关键检查和
+v2 签名校验。
 
 ## 兼容性说明
 
 - 已在 OnePlus PLQ110、Android 16、1080×2378 和 720×1280 小屏参数下验证
   首页布局、主题切换、底部导航、模块开关和官方页面跳转。
+- 已在 OnePlus PLQ110 上验证 STmall 首页、慧生活主页、登录页、NFC 页面和
+  NFC 设备编号回填流程；实际标签写入仍需使用本人 NFC 标签验证。
 - 使用系统字体缩放 1.3 验证过文字不重叠、不被截断。
 - 已在 HONOR `Hera-BD00`、Android 11、无 Root 环境验证 Shizuku 启动、
   登录态导入、校园身份检查、饮水只读查询和门锁结果回传。
@@ -152,7 +189,8 @@ android/app/build/outputs/apk/release/app-release.apk
 ## 隐私与安全
 
 - 本项目不附带账号、Cookie、`activationKey`、手机号、签名密钥或设备数据。
-- 登录 Cookie 和门锁凭证由 Android Keystore 加密，并明确排除系统备份。
+- 登录 Cookie、慧生活账户/Token 和门锁凭证由 Android Keystore 加密，并明确
+  排除系统备份。
 - 抓取服务只面向本机官方天猫校园和用户已授权的 Shizuku 通道。
 - 请勿在 Issue、讨论区或截图中公开 Cookie、`activationKey`、完整手机号、
   门锁序列号或设备日志。安全问题请遵循 [SECURITY.md](SECURITY.md)。
@@ -164,6 +202,10 @@ android/app/build/outputs/apk/release/app-release.apk
 - 订单页要求官方账号登录态有效；失效时可能先进入官方登录页。
 - 校园饮水和订单接口可能随服务端更新而变化。
 - 蓝牙连接会受到距离、电量、系统后台策略和门锁固件状态影响。
+- NFC 标签读写只支持兼容 NfcA/Ndef 的标签；标签被锁定、加密或格式不兼容时
+  无法写入。
+- 当前版本不实现慧生活云卡 HCE、APDU 刷卡、支付密码或第三方门禁卡复制。
+- 慧生活积分任务可能导致账号限制、积分冻结或不到账，请自行确认服务规则。
 - 已保存凭证可用于离线开门，但手机重启后若需重新同步或抓取，仍要重新
   启动 Shizuku。
 
@@ -174,9 +216,16 @@ android/app/build/outputs/apk/release/app-release.apk
 - TMallKey：<https://github.com/lmc2007/TMallKey>
 - TMallKey 文档：<https://lmc2007.github.io/TMallKey/>
 
+慧生活账户、饮水、钱包、积分和账单协议参考：
+
+- life-798：<https://github.com/nocookies111/life-798>
+
 液态玻璃交互和底栏视觉原则参考：
 
 - AndroidLiquidGlass：<https://github.com/Kyant0/AndroidLiquidGlass>
+- Backdrop 文档：<https://kyant.gitbook.io/backdrop>
+- GlassExplorer（交互概念参考，未复制代码）：
+  <https://github.com/ktiays/GlassExplorer>
 
 应用图标由项目提供者提供，图标来源标注为：
 
@@ -188,6 +237,8 @@ android/app/build/outputs/apk/release/app-release.apk
   [LICENSE-TMallKey](LICENSE-TMallKey)。
 - AndroidLiquidGlass 参考项目采用 Apache License 2.0，许可文本见
   [LICENSE-AndroidLiquidGlass](LICENSE-AndroidLiquidGlass)。
+- life-798 参考项目采用 MIT License，许可文本见
+  [LICENSE-life798](LICENSE-life798)。
 - 第三方项目名称、商标和图标权利归各自权利人所有。
 - 本仓库未对 STmall 自有代码额外授予项目级开源许可证；如需再分发或商用，
   请先确认你自己拥有相应授权，并遵守所有第三方许可及服务条款。
@@ -197,9 +248,10 @@ android/app/build/outputs/apk/release/app-release.apk
 本项目仅用于个人学习和本人设备管理。使用者必须遵守所在地法律法规、官方
 平台服务条款、学校宿舍管理规定以及设备所有者的授权范围。
 
-本项目与天猫、淘宝、阿里巴巴、学校、门锁厂商及 Shizuku 项目无隶属或授权
-关系。作者不保证功能的持续性、准确性、安全性或适销性，也不对因使用或无法
-使用本项目造成的账号受限、数据丢失、门锁故障、财产损失或人身伤害承担任何
-责任。请勿将本项目用于未授权访问、破解、绕过访问控制或其他违法用途。
+本项目与天猫、淘宝、阿里巴巴、慧生活798、学校、门锁厂商及 Shizuku 项目无
+隶属或授权关系。作者不保证功能的持续性、准确性、安全性或适销性，也不对因
+使用或无法使用本项目造成的账号受限、积分损失、数据丢失、门锁故障、财产损失
+或人身伤害承担任何责任。请勿将本项目用于未授权访问、破解、绕过访问控制或
+其他违法用途。
 
 完整免责声明见 [DISCLAIMER.md](DISCLAIMER.md)。

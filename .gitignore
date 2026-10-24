@@ -6,10 +6,13 @@ android/.gradle/
 android/.kotlin/
 android/build/
 android/app/build/
+android/*/build/
+android/*/.kotlin/
 android/local.properties
 
 # Signing material - never publish
 android/keystore.properties
+android/life798.properties
 *.jks
 *.keystore
 *.p12
@@ -18,6 +21,7 @@ android/keystore.properties
 # Release binaries are uploaded to GitHub Releases, not committed
 *.apk
 *.aab
+life798-release/
 
 # Local reference checkout and unsanitized device-test evidence
 reference/

@@ -1,10 +1,18 @@
 package com.fktm.app.ui
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -13,6 +21,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -22,6 +32,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -43,6 +54,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -54,6 +66,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -70,28 +83,63 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fktm.app.FktmApp
 import com.fktm.app.credential.LockCredential
+import com.fktm.app.nfc.NfcTagActivity
+import com.fktm.app.nfc.NfcTagCodec
 import com.fktm.app.settings.AppPreferences
 import com.fktm.app.settings.ThemeMode
 import com.fktm.app.vm.UnlockViewModel
 import com.fktm.app.vm.UnlockState
 import com.fktm.app.vm.WaterViewModel
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.backdrop.drawBackdrop
+import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.effects.vibrancy
+import com.kyant.backdrop.highlight.Highlight
+import com.kyant.backdrop.shadow.Shadow
+import com.water.widget.ConfigActivity
+import com.water.widget.DeviceAddActivity
+import com.water.widget.AccountStore
+import com.water.widget.AccountsActivity
+import com.water.widget.AppThemeMode as HuishengThemeMode
+import com.water.widget.IlifeApi
+import com.water.widget.LoginActivity
+import com.water.widget.LoginStatusStore
+import com.water.widget.ScoreActivity
+import com.water.widget.ThemeSettings
+import com.water.widget.TokenValidity
+import com.water.widget.WalletActivity
+import com.water.widget.WalletResponseParser
+import com.water.widget.ui.DashboardViewModel
+import com.water.widget.ui.HuishengMineContent
 import kotlinx.coroutines.delay
 
 private enum class CampusPage {
     Home,
     SmartDorm,
     Scanner,
-    Profile,
+    MyHub,
+    TmallProfile,
+    IlifeProfile,
     Settings,
 }
+
+private fun CampusPage.isMyPage(): Boolean =
+    this == CampusPage.MyHub ||
+        this == CampusPage.TmallProfile ||
+        this == CampusPage.IlifeProfile
 
 private enum class HomeModule(
     val key: String,
@@ -107,6 +155,16 @@ private enum class HomeModule(
         AppPreferences.MODULE_SCANNER,
         "扫一扫",
         "扫描校园设备二维码",
+    ),
+    Ilife(
+        AppPreferences.MODULE_ILIFE,
+        "慧生活",
+        "饮水、钱包、积分与账单",
+    ),
+    Nfc(
+        AppPreferences.MODULE_NFC,
+        "NFC 碰一碰",
+        "读取或写入设备标签",
     ),
     QuickUnlock(
         AppPreferences.MODULE_QUICK_UNLOCK,
@@ -171,7 +229,15 @@ fun CampusLiteApp(
     }
 
     BackHandler(enabled = page != CampusPage.Home) {
-        page = if (page == CampusPage.Settings) settingsOrigin else CampusPage.Home
+        page = when (page) {
+            CampusPage.Settings -> settingsOrigin
+            CampusPage.TmallProfile,
+            CampusPage.IlifeProfile,
+            -> CampusPage.MyHub
+
+            CampusPage.MyHub -> CampusPage.Home
+            else -> CampusPage.Home
+        }
     }
 
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -185,33 +251,104 @@ fun CampusLiteApp(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    Box(Modifier.fillMaxSize()) {
-        Scaffold(
-            containerColor = MaterialTheme.colorScheme.background,
-            bottomBar = {
-                if (page != CampusPage.Scanner && page != CampusPage.Settings) {
-                    LiquidGlassBottomBar(
-                        selectedIndex = if (page == CampusPage.Profile) 1 else 0,
-                        onSelected = { index ->
-                            page = if (index == 0) CampusPage.Home else CampusPage.Profile
-                        },
-                        darkTheme = darkTheme,
-                    )
-                }
-            },
-        ) { innerPadding ->
+    val showTopActions = page == CampusPage.Home || page == CampusPage.MyHub
+    val showBottomBar = page != CampusPage.Scanner && page != CampusPage.Settings
+    val glassBackdrop = rememberLayerBackdrop()
+    val backgroundBackdrop = rememberLayerBackdrop()
+
+    CompositionLocalProvider(LocalLiquidGlassBackdrop provides glassBackdrop) {
+        Box(Modifier.fillMaxSize()) {
             Box(
                 Modifier
                     .fillMaxSize()
-                    .padding(innerPadding),
+                    .layerBackdrop(glassBackdrop)
             ) {
-                when (page) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .layerBackdrop(backgroundBackdrop)
+                        .background(MaterialTheme.colorScheme.background)
+                ) {
+                    LiquidGlassAmbientBackground(darkTheme)
+                }
+                CompositionLocalProvider(
+                    LocalLiquidGlassBackdrop provides backgroundBackdrop
+                ) {
+                    Scaffold(
+                    containerColor = Color.Transparent,
+                    contentColor = MaterialTheme.colorScheme.onBackground,
+                    topBar = {
+                        if (showTopActions) {
+                            Spacer(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .statusBarsPadding()
+                                    .height(70.dp)
+                            )
+                        }
+                    },
+                    bottomBar = {
+                        if (showBottomBar) {
+                            Spacer(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .navigationBarsPadding()
+                                    .height(80.dp)
+                            )
+                        }
+                    },
+                    ) { innerPadding ->
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .padding(innerPadding),
+                        ) {
+                            AnimatedContent(
+                                targetState = page,
+                                transitionSpec = {
+                                    val animationsEnabled =
+                                        ValueAnimator.areAnimatorsEnabled()
+                                    val initialIsTab = initialState == CampusPage.Home ||
+                                        initialState == CampusPage.MyHub
+                                    val targetIsTab = targetState == CampusPage.Home ||
+                                        targetState == CampusPage.MyHub
+                                    if (animationsEnabled && initialIsTab && targetIsTab &&
+                                        initialState != targetState
+                                    ) {
+                                        val direction = if (targetState == CampusPage.MyHub) 1 else -1
+                                        (
+                                            slideInHorizontally(tween(360)) {
+                                                it * direction / 2
+                                            } + fadeIn(tween(180))
+                                        ) togetherWith (
+                                            slideOutHorizontally(tween(320)) {
+                                                -it * direction / 4
+                                            } + fadeOut(tween(150))
+                                        )
+                                    } else {
+                                        fadeIn(tween(if (animationsEnabled) 180 else 0)) togetherWith
+                                            fadeOut(tween(if (animationsEnabled) 120 else 0))
+                                    }
+                                },
+                                label = "campus-page-transition",
+                            ) { targetPage ->
+                            when (targetPage) {
                 CampusPage.Home -> CampusHome(
                     onSmartDorm = {
                         dormSection = 0
                         page = CampusPage.SmartDorm
                     },
                     onScan = { page = CampusPage.Scanner },
+                    onIlife = {
+                        context.startActivity(
+                            Intent(context, ConfigActivity::class.java)
+                                .putExtra(ConfigActivity.EXTRA_HIDE_MINE, true)
+                                .putExtra(ConfigActivity.EXTRA_THEME_MODE, themeMode.storedValue)
+                        )
+                    },
+                    onNfc = {
+                        context.startActivity(Intent(context, NfcTagActivity::class.java))
+                    },
                     credential = lockVm.locks.firstOrNull(),
                     unlockState = lockVm.state,
                     onQuickUnlock = onQuickUnlock,
@@ -232,20 +369,41 @@ fun CampusLiteApp(
 
                 CampusPage.Scanner -> QrScannerScreen(
                     onDetected = { text ->
-                        waterVm.resolve(context.applicationContext, text)
-                        dormSection = 1
-                        page = CampusPage.SmartDorm
+                        val ilifeId = NfcTagCodec.extractDeviceId(text)
+                        if (ilifeId != null && NfcTagCodec.isIlifePayload(text)) {
+                            context.startActivity(
+                                Intent(context, DeviceAddActivity::class.java)
+                                    .putExtra(DeviceAddActivity.EXTRA_DEVICE_ID, ilifeId)
+                            )
+                            page = CampusPage.Home
+                        } else {
+                            waterVm.resolve(context.applicationContext, text)
+                            dormSection = 1
+                            page = CampusPage.SmartDorm
+                        }
                     },
                     onClose = { page = CampusPage.Home },
                 )
 
-                CampusPage.Profile -> ProfileScreen(
+                CampusPage.MyHub -> MyHubScreen(
+                    onTmall = { page = CampusPage.TmallProfile },
+                    onIlife = { page = CampusPage.IlifeProfile },
+                )
+
+                CampusPage.TmallProfile -> ProfileScreen(
                     waterVm = waterVm,
+                    onBack = { page = CampusPage.MyHub },
                     onSyncAccount = { waterVm.importFromDevice(context.applicationContext) },
                     onOpenOfficial = { openOfficialCampus(context) },
                     onOpenOrders = { openOfficialOrders(context) },
                     onOpenAddress = { openOfficialAddress(context) },
                     onOpenShizuku = { openShizukuManager(context) },
+                )
+
+                CampusPage.IlifeProfile -> IlifeProfileScreen(
+                    onBack = { page = CampusPage.MyHub },
+                    onOpenAppearance = { openSettings(CampusPage.IlifeProfile) },
+                    appThemeMode = themeMode,
                 )
 
                 CampusPage.Settings -> SettingsScreen(
@@ -258,30 +416,49 @@ fun CampusLiteApp(
                     onBack = { page = settingsOrigin },
                 )
             }
+                            }
         }
         }
 
-        if (page == CampusPage.Home || page == CampusPage.Profile) {
-            LiquidGlassTopActions(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .statusBarsPadding()
-                    .padding(top = 16.dp, end = 20.dp),
-                showThemeToggle = page == CampusPage.Home,
-                darkTheme = darkTheme,
-                enabled = themeReveal == null,
-                onThemeToggle = { center ->
-                    if (themeReveal == null) {
-                        themeReveal = ThemeRevealSpec(
-                            id = System.nanoTime(),
-                            center = center,
-                            targetDark = !darkTheme,
-                        )
-                    }
-                },
-                onSettings = { openSettings(page) },
-            )
-        }
+                }
+            }
+
+            if (showTopActions) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(top = 16.dp, end = 20.dp, bottom = 8.dp),
+                    contentAlignment = Alignment.TopEnd,
+                ) {
+                    LiquidGlassTopActions(
+                        showThemeToggle = page == CampusPage.Home,
+                        darkTheme = darkTheme,
+                        enabled = themeReveal == null,
+                        onThemeToggle = { center ->
+                            if (themeReveal == null) {
+                                themeReveal = ThemeRevealSpec(
+                                    id = System.nanoTime(),
+                                    center = center,
+                                    targetDark = !darkTheme,
+                                )
+                            }
+                        },
+                        onSettings = { openSettings(page) },
+                    )
+                }
+            }
+
+            if (showBottomBar) {
+                LiquidGlassBottomBar(
+                    selectedIndex = if (page.isMyPage()) 1 else 0,
+                    onSelected = { index ->
+                        page = if (index == 0) CampusPage.Home else CampusPage.MyHub
+                    },
+                    darkTheme = darkTheme,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                )
+            }
 
         themeReveal?.let { spec ->
             ThemeRevealOverlay(
@@ -296,11 +473,14 @@ fun CampusLiteApp(
         }
     }
 }
+}
 
 @Composable
 private fun CampusHome(
     onSmartDorm: () -> Unit,
     onScan: () -> Unit,
+    onIlife: () -> Unit,
+    onNfc: () -> Unit,
     credential: LockCredential?,
     unlockState: UnlockState,
     onQuickUnlock: () -> Unit,
@@ -309,104 +489,99 @@ private fun CampusHome(
     darkTheme: Boolean,
 ) {
     val quickEnabled = HomeModule.QuickUnlock in enabledModules
-    val cardModules = listOf(HomeModule.SmartDorm, HomeModule.Scanner)
+    val cardModules = listOf(
+        HomeModule.SmartDorm,
+        HomeModule.Scanner,
+        HomeModule.Ilife,
+        HomeModule.Nfc,
+    )
         .filter { it in enabledModules }
+    val onlyQuickUnlock = quickEnabled && cardModules.isEmpty()
 
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    if (darkTheme) {
-                        listOf(Color.Black, Color.Black, Color.Black)
-                    } else {
-                        listOf(Color(0xFFF9FBF9), Color(0xFFF0F5F2), Color(0xFFF7F9F8))
-                    }
-                )
-            )
             .padding(horizontal = 24.dp),
     ) {
-        val compact = maxHeight < 660.dp
-        val scrollable = maxHeight < 540.dp
-        val scrollState = rememberScrollState()
+        val compact = maxHeight < 700.dp
+        val dense = maxHeight < 560.dp
         Column(
-            modifier = (
-                if (scrollable) {
-                    Modifier
-                        .fillMaxSize()
-                        .verticalScroll(scrollState)
-                } else {
-                    Modifier.fillMaxSize()
-                }
-            ).padding(
-                top = if (scrollable) 58.dp else 8.dp,
+            modifier = Modifier.fillMaxSize().padding(
+                top = 8.dp,
                 bottom = if (compact) 18.dp else 34.dp,
             ),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            if (!scrollable) {
-                Spacer(Modifier.weight(if (enabledModules.isEmpty()) 0.68f else 0.4f))
+            if (onlyQuickUnlock) {
+                Spacer(Modifier.weight(1.15f))
             }
-            Text(
-                "STmall",
-                fontSize = if (compact) 11.sp else 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 2.6.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(if (compact) 7.dp else 10.dp))
-            Text(
-                "今天想做什么？",
-                fontSize = if (compact) 26.sp else 30.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-            Text(
-                "校园服务，一步直达",
-                fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 6.dp),
-            )
-            Spacer(Modifier.height(if (compact) 18.dp else if (quickEnabled) 26.dp else 34.dp))
+            if (enabledModules.isEmpty()) {
+                Spacer(Modifier.weight(0.68f))
+                Text(
+                    "STmall",
+                    fontSize = if (compact) 11.sp else 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 2.6.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(if (compact) 7.dp else 10.dp))
+                Text(
+                    "今天想做什么？",
+                    fontSize = if (compact) 26.sp else 30.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                Text(
+                    "校园服务，一步直达",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+                Spacer(Modifier.height(if (compact) 18.dp else 34.dp))
+            }
 
             if (enabledModules.isEmpty()) {
                 EmptyHomeState(onOpenSettings = onOpenSettings)
             } else {
                 val cardHeight = when {
-                    quickEnabled && compact -> 150.dp
-                    quickEnabled -> 178.dp
-                    compact -> 184.dp
-                    else -> 210.dp
+                    dense -> 112.dp
+                    cardModules.size == 1 && quickEnabled -> 178.dp
+                    cardModules.size == 1 && compact -> 184.dp
+                    cardModules.size == 1 -> 210.dp
+                    compact -> 132.dp
+                    else -> 154.dp
                 }
-                when (cardModules.size) {
-                    1 -> ModuleFeatureCard(
-                        module = cardModules.first(),
-                        modifier = Modifier.fillMaxWidth(),
-                        height = cardHeight,
-                        darkTheme = darkTheme,
-                        onSmartDorm = onSmartDorm,
-                        onScan = onScan,
-                    )
-
-                    2 -> Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    ) {
-                        cardModules.forEach { module ->
-                            ModuleFeatureCard(
-                                module = module,
-                                modifier = Modifier.weight(1f),
-                                height = cardHeight,
-                                darkTheme = darkTheme,
-                                onSmartDorm = onSmartDorm,
-                                onScan = onScan,
-                            )
+                Column(
+                    Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(if (dense) 10.dp else 14.dp),
+                ) {
+                    cardModules.chunked(2).forEach { rowModules ->
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        ) {
+                            rowModules.forEach { module ->
+                                ModuleFeatureCard(
+                                    module = module,
+                                    modifier = Modifier.weight(1f),
+                                    height = cardHeight,
+                                    darkTheme = darkTheme,
+                                    onSmartDorm = onSmartDorm,
+                                    onScan = onScan,
+                                    onIlife = onIlife,
+                                    onNfc = onNfc,
+                                    dense = dense || cardModules.size > 1,
+                                )
+                            }
+                            if (rowModules.size == 1 && cardModules.size > 1) {
+                                Spacer(Modifier.weight(1f))
+                            }
                         }
                     }
                 }
 
                 if (quickEnabled) {
-                    Spacer(Modifier.height(if (cardModules.isEmpty()) 8.dp else 16.dp))
+                    Spacer(Modifier.height(if (cardModules.isEmpty()) 8.dp else if (dense) 10.dp else 16.dp))
                     QuickUnlockCircle(
                         credential = credential,
                         state = unlockState,
@@ -414,21 +589,16 @@ private fun CampusHome(
                         onManageLock = onSmartDorm,
                         compact = compact,
                         darkTheme = darkTheme,
+                        dense = dense,
                     )
                 }
             }
 
-            Spacer(
-                if (scrollable) {
-                    Modifier.height(20.dp)
-                } else {
-                    Modifier.weight(0.3f)
-                }
-            )
+            Spacer(Modifier.weight(if (onlyQuickUnlock) 0.55f else 1f))
             Text(
-                "无广告 · 官方账号同步 · 数据只保存在本机",
+                "无广告 · 凭证本地加密 · 仅连接必要服务",
                 fontSize = if (compact) 10.sp else 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.94f),
                 textAlign = TextAlign.Center,
             )
         }
@@ -443,31 +613,64 @@ private fun ModuleFeatureCard(
     darkTheme: Boolean,
     onSmartDorm: () -> Unit,
     onScan: () -> Unit,
+    onIlife: () -> Unit,
+    onNfc: () -> Unit,
+    dense: Boolean,
 ) {
-    val isSmartDorm = module == HomeModule.SmartDorm
-    val accent = when {
-        isSmartDorm && darkTheme -> MaterialTheme.colorScheme.primary
-        isSmartDorm -> Color(0xFF25735F)
-        darkTheme -> MaterialTheme.colorScheme.tertiary
-        else -> Color(0xFF3C6688)
+    val accent = when (module) {
+        HomeModule.SmartDorm -> if (darkTheme) MaterialTheme.colorScheme.primary else Color(0xFF25735F)
+        HomeModule.Scanner -> if (darkTheme) MaterialTheme.colorScheme.tertiary else Color(0xFF3C6688)
+        HomeModule.Ilife -> if (darkTheme) Color(0xFF8AB4F8) else Color(0xFF315F9C)
+        HomeModule.Nfc -> if (darkTheme) Color(0xFFFFB86B) else Color(0xFF9A5A18)
+        HomeModule.QuickUnlock -> MaterialTheme.colorScheme.primary
     }
-    val container = when {
-        darkTheme -> MaterialTheme.colorScheme.surfaceVariant
-        isSmartDorm -> Color(0xFFE7F5F0)
-        else -> Color(0xFFEAF1F7)
+    val container = when (module) {
+        HomeModule.SmartDorm -> if (darkTheme) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFE7F5F0)
+        HomeModule.Scanner -> if (darkTheme) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFEAF1F7)
+        HomeModule.Ilife -> if (darkTheme) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFE8EEFB)
+        HomeModule.Nfc -> if (darkTheme) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFF8EEDF)
+        HomeModule.QuickUnlock -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val title = when (module) {
+        HomeModule.SmartDorm -> "智能宿舍"
+        HomeModule.Scanner -> "扫一扫"
+        HomeModule.Ilife -> "慧生活"
+        HomeModule.Nfc -> "NFC 碰一碰"
+        HomeModule.QuickUnlock -> "一键开门"
+    }
+    val subtitle = when (module) {
+        HomeModule.SmartDorm -> "门锁 · 饮水"
+        HomeModule.Scanner -> "扫码服务"
+        HomeModule.Ilife -> "钱包 · 积分 · 账单"
+        HomeModule.Nfc -> "读写设备标签"
+        HomeModule.QuickUnlock -> "快速开门"
+    }
+    val onClick = when (module) {
+        HomeModule.SmartDorm -> onSmartDorm
+        HomeModule.Scanner -> onScan
+        HomeModule.Ilife -> onIlife
+        HomeModule.Nfc -> onNfc
+        HomeModule.QuickUnlock -> onSmartDorm
     }
     FeatureCard(
         modifier = modifier,
         height = height,
         darkTheme = darkTheme,
         icon = { color ->
-            if (isSmartDorm) SmartDormGlyph(color) else ScannerGlyph(color)
+            when (module) {
+                HomeModule.SmartDorm -> SmartDormGlyph(color)
+                HomeModule.Scanner -> ScannerGlyph(color)
+                HomeModule.Ilife -> IlifeGlyph(color)
+                HomeModule.Nfc -> NfcGlyph(color)
+                HomeModule.QuickUnlock -> SmartDormGlyph(color)
+            }
         },
-        title = if (isSmartDorm) "智能宿舍" else "扫一扫",
-        subtitle = if (isSmartDorm) "门锁 · 饮水" else "扫码进入校园服务",
+        title = title,
+        subtitle = subtitle,
         accent = accent,
         container = container,
-        onClick = if (isSmartDorm) onSmartDorm else onScan,
+        onClick = onClick,
+        dense = dense,
     )
 }
 
@@ -506,9 +709,17 @@ private fun QuickUnlockCircle(
     onManageLock: () -> Unit,
     compact: Boolean,
     darkTheme: Boolean,
+    dense: Boolean,
 ) {
     val working = state is UnlockState.Working
     val hasCredential = credential != null
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed) 0.955f else 1f,
+        animationSpec = spring(stiffness = 620f, dampingRatio = 0.66f),
+        label = "quick-unlock-glass-press",
+    )
     val title = when {
         working -> "开门中"
         state is UnlockState.Success -> "已开门"
@@ -538,60 +749,129 @@ private fun QuickUnlockCircle(
         state is UnlockState.Success -> MaterialTheme.colorScheme.onPrimaryContainer
         else -> MaterialTheme.colorScheme.onPrimary
     }
+    val denseSubtitle = when {
+        !hasCredential -> "点此设置"
+        working -> "连接中"
+        state is UnlockState.Success -> "已开门"
+        state is UnlockState.Failure -> "重试"
+        else -> credential.name
+    }
+    val backdrop = LocalLiquidGlassBackdrop.current
+    val useNativeGlass = backdrop != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val surfaceModifier = if (useNativeGlass) {
+        Modifier.drawBackdrop(
+            backdrop = backdrop!!,
+            shape = { CircleShape },
+            effects = {
+                vibrancy()
+                blur(5.dp.toPx())
+                lens(
+                    refractionHeight = 20.dp.toPx(),
+                    refractionAmount = 36.dp.toPx(),
+                    depthEffect = true,
+                    chromaticAberration = true,
+                )
+            },
+            highlight = { Highlight.Ambient.copy(alpha = 0.92f) },
+            shadow = {
+                Shadow.Default.copy(
+                    radius = 22.dp,
+                    color = Color.Black.copy(alpha = 0.24f),
+                )
+            },
+            layerBlock = {
+                scaleX = pressScale
+                scaleY = pressScale
+            },
+            onDrawSurface = {
+                drawRect(containerTopColor.copy(alpha = if (darkTheme) 0.14f else 0.12f))
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        listOf(
+                            containerTopColor.copy(alpha = if (darkTheme) 0.58f else 0.62f),
+                            containerBottomColor.copy(alpha = if (darkTheme) 0.38f else 0.44f),
+                        )
+                    ),
+                    radius = size.minDimension * 0.43f,
+                    center = center,
+                )
+                drawRect(
+                    Brush.radialGradient(
+                        listOf(Color.White.copy(alpha = 0.18f), Color.Transparent),
+                        center = Offset(size.width * 0.28f, 0f),
+                        radius = size.maxDimension * 0.85f,
+                    )
+                )
+            },
+        )
+    } else {
+        Modifier
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            }
+            .clip(CircleShape)
+            .background(
+                Brush.radialGradient(
+                    listOf(containerTopColor, containerBottomColor),
+                )
+            )
+            .border(
+                1.dp,
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.16f),
+                CircleShape,
+            )
+    }
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(7.dp),
+        verticalArrangement = Arrangement.spacedBy(if (dense) 4.dp else 7.dp),
     ) {
         Box(
             Modifier
-                .size(if (compact) 132.dp else 154.dp)
-                .clip(CircleShape)
-                .background(
-                    Brush.radialGradient(
-                        listOf(containerTopColor, containerBottomColor),
-                    )
-                )
-                .border(
-                    1.dp,
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.16f),
-                    CircleShape,
-                )
-                .clickable(enabled = !working) {
+                .size(if (dense) 96.dp else if (compact) 132.dp else 154.dp)
+                .then(surfaceModifier)
+                .clickable(
+                    enabled = !working,
+                    interactionSource = interaction,
+                    indication = null,
+                ) {
                     if (hasCredential) onUnlock() else onManageLock()
                 }
-                .padding(18.dp),
+                .padding(if (dense) 10.dp else 18.dp),
             contentAlignment = Alignment.Center,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     if (working) "蓝牙直连中" else "蓝牙门锁",
-                    fontSize = if (compact) 9.sp else 10.sp,
+                    fontSize = if (dense) 8.sp else if (compact) 9.sp else 10.sp,
                     color = foregroundColor,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
                     title,
-                    fontSize = if (compact) 18.sp else 20.sp,
+                    fontSize = if (dense) 15.sp else if (compact) 18.sp else 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = foregroundColor,
                     textAlign = TextAlign.Center,
                 )
                 Text(
-                    subtitle,
-                    fontSize = if (compact) 8.sp else 9.sp,
-                    lineHeight = if (compact) 10.sp else 12.sp,
+                    if (dense) denseSubtitle else subtitle,
+                    fontSize = if (dense) 7.sp else if (compact) 8.sp else 9.sp,
+                    lineHeight = if (dense) 9.sp else if (compact) 10.sp else 12.sp,
                     color = foregroundColor,
                     textAlign = TextAlign.Center,
-                    maxLines = 2,
+                    maxLines = if (dense) 1 else 2,
                 )
             }
         }
-        Text(
-            if (hasCredential) "点击圆钮即可开门" else "添加一次钥匙，以后可离线开门",
-            fontSize = 10.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        if (!dense) {
+            Text(
+                if (hasCredential) "点击圆钮即可开门" else "添加一次钥匙，以后可离线开门",
+                fontSize = 10.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
@@ -606,50 +886,146 @@ private fun FeatureCard(
     accent: Color,
     container: Color,
     onClick: () -> Unit,
+    dense: Boolean,
 ) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.975f else 1f,
+        animationSpec = spring(stiffness = 650f, dampingRatio = 0.68f),
+        label = "feature-card-press",
+    )
     val bottomColor = if (darkTheme) {
         lerp(container, Color.Black, 0.18f)
     } else {
         lerp(container, MaterialTheme.colorScheme.background, 0.16f)
     }
-    Box(
-        modifier
-            .height(height)
-            .clip(RoundedCornerShape(28.dp))
-            .background(
-                Brush.verticalGradient(listOf(container, bottomColor))
-            )
+    val shape = RoundedCornerShape(if (dense) 20.dp else 28.dp)
+    val backdrop = LocalLiquidGlassBackdrop.current
+    val useNativeGlass = backdrop != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val surfaceModifier = if (useNativeGlass) {
+        Modifier.drawBackdrop(
+            backdrop = backdrop!!,
+            shape = { shape },
+            effects = {
+                vibrancy()
+                blur(4.dp.toPx())
+                lens(
+                    refractionHeight = 16.dp.toPx(),
+                    refractionAmount = 28.dp.toPx(),
+                    depthEffect = true,
+                    chromaticAberration = true,
+                )
+            },
+            highlight = { Highlight.Ambient },
+            shadow = {
+                Shadow.Default.copy(
+                    radius = 15.dp,
+                    color = Color.Black.copy(alpha = 0.16f),
+                )
+            },
+            layerBlock = {
+                scaleX = scale
+                scaleY = scale
+            },
+            onDrawSurface = {
+                drawRect(
+                    Brush.verticalGradient(
+                        listOf(
+                            container.copy(alpha = if (darkTheme) 0.34f else 0.34f),
+                            bottomColor.copy(alpha = if (darkTheme) 0.18f else 0.2f),
+                        )
+                    )
+                )
+                drawRect(
+                    Brush.radialGradient(
+                        listOf(Color.White.copy(alpha = 0.18f), Color.Transparent),
+                        center = Offset(size.width * 0.18f, 0f),
+                        radius = size.maxDimension * 0.85f,
+                    )
+                )
+            },
+        )
+    } else {
+        Modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(shape)
+            .background(Brush.verticalGradient(listOf(container, bottomColor)))
             .border(
                 1.dp,
                 MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f),
-                RoundedCornerShape(28.dp),
+                shape,
             )
-            .clickable(onClick = onClick)
-            .padding(18.dp),
+    }
+    Box(
+        modifier
+            .height(height)
+            .then(surfaceModifier)
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                onClick = onClick,
+            )
+            .padding(if (dense) 10.dp else 18.dp),
     ) {
-        Column(
-            Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Box(
-                Modifier
-                    .size(68.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.78f)),
-                contentAlignment = Alignment.Center,
+        if (dense) {
+            val iconSize = if (height < 120.dp) 36.dp else 46.dp
+            val titleSize = if (height < 120.dp) 15.sp else 17.sp
+            val subtitleSize = if (height < 120.dp) 10.sp else 11.sp
+            Column(
+                Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                icon(accent)
+                LiquidGlassIconDisc(discSize = iconSize) {
+                    icon(accent)
+                }
+                Spacer(Modifier.height(if (height < 120.dp) 4.dp else 7.dp))
+                Text(
+                    title,
+                    fontSize = titleSize,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.height(if (height < 120.dp) 2.dp else 3.dp))
+                Text(
+                    subtitle,
+                    fontSize = subtitleSize,
+                    color = accent.copy(alpha = if (darkTheme) 0.9f else 0.95f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                )
             }
-            Spacer(Modifier.height(18.dp))
-            Text(
-                title,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Spacer(Modifier.height(7.dp))
-            Text(subtitle, fontSize = 12.sp, color = accent.copy(alpha = 0.82f))
+        } else {
+            Column(
+                Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                LiquidGlassIconDisc(discSize = 68.dp) {
+                    icon(accent)
+                }
+                Spacer(Modifier.height(18.dp))
+                Text(
+                    title,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.height(7.dp))
+                Text(
+                    subtitle,
+                    fontSize = 12.sp,
+                    color = accent.copy(alpha = if (darkTheme) 0.9f else 0.95f),
+                )
+            }
         }
     }
 }
@@ -749,6 +1125,69 @@ private fun ScannerGlyph(color: Color) {
 }
 
 @Composable
+private fun IlifeGlyph(color: Color) {
+    Canvas(Modifier.size(32.dp)) {
+        val stroke = Stroke(
+            width = 2.dp.toPx(),
+            cap = StrokeCap.Round,
+            join = StrokeJoin.Round,
+        )
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(size.width * 0.16f, size.height * 0.22f),
+            size = Size(size.width * 0.68f, size.height * 0.56f),
+            cornerRadius = CornerRadius(6.dp.toPx()),
+            style = stroke,
+        )
+        drawCircle(
+            color = color,
+            radius = 2.2.dp.toPx(),
+            center = Offset(size.width * 0.34f, size.height * 0.58f),
+        )
+        drawLine(
+            color = color.copy(alpha = 0.72f),
+            start = Offset(size.width * 0.45f, size.height * 0.45f),
+            end = Offset(size.width * 0.72f, size.height * 0.45f),
+            strokeWidth = 2.dp.toPx(),
+            cap = StrokeCap.Round,
+        )
+        drawLine(
+            color = color.copy(alpha = 0.72f),
+            start = Offset(size.width * 0.45f, size.height * 0.6f),
+            end = Offset(size.width * 0.64f, size.height * 0.6f),
+            strokeWidth = 2.dp.toPx(),
+            cap = StrokeCap.Round,
+        )
+    }
+}
+
+@Composable
+private fun NfcGlyph(color: Color) {
+    Canvas(Modifier.size(32.dp)) {
+        val stroke = Stroke(width = 2.1.dp.toPx(), cap = StrokeCap.Round)
+        drawCircle(
+            color = color,
+            radius = 1.8.dp.toPx(),
+            center = Offset(size.width * 0.27f, size.height * 0.54f),
+        )
+        listOf(0.48f, 0.66f, 0.84f).forEachIndexed { index, fraction ->
+            drawArc(
+                color = color.copy(alpha = 1f - index * 0.16f),
+                startAngle = -50f,
+                sweepAngle = 100f,
+                useCenter = false,
+                topLeft = Offset(
+                    size.width * (fraction - 0.42f),
+                    size.height * (0.52f - fraction),
+                ),
+                size = Size(size.width * fraction * 0.72f, size.height * fraction * 0.96f),
+                style = stroke,
+            )
+        }
+    }
+}
+
+@Composable
 private fun SmartDormScreen(
     selectedSection: Int,
     onSectionChange: (Int) -> Unit,
@@ -758,7 +1197,7 @@ private fun SmartDormScreen(
     onRequestBlePermissions: () -> Unit,
     onEnsureNotificationPermission: () -> Unit,
 ) {
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().statusBarsPadding()) {
         PageHeader(title = "智能宿舍", onBack = onBack)
         Row(
             Modifier
@@ -793,8 +1232,292 @@ private fun SmartDormScreen(
 }
 
 @Composable
+private fun MyHubScreen(
+    onTmall: () -> Unit,
+    onIlife: () -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Column {
+            Text("我的", fontSize = 28.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "选择要进入的账号与服务",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        MyHubEntryCard(
+            title = "天猫校园",
+            subtitle = "登录态、订单、地址与 Shizuku 同步",
+            badge = "天猫",
+            container = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            onClick = onTmall,
+        )
+        MyHubEntryCard(
+            title = "慧生活",
+            subtitle = "账户、积分、钱包、消费记录与自动任务",
+            badge = "慧",
+            container = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            onClick = onIlife,
+        )
+
+        Text(
+            "两个平台分别登录、分别保存。敏感信息只保存在本机加密存储中。",
+            modifier = Modifier.padding(horizontal = 4.dp),
+            fontSize = 11.sp,
+            lineHeight = 17.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun MyHubEntryCard(
+    title: String,
+    subtitle: String,
+    badge: String,
+    container: Color,
+    contentColor: Color,
+    onClick: () -> Unit,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.975f else 1f,
+        animationSpec = spring(stiffness = 620f, dampingRatio = 0.7f),
+        label = "my-hub-card-press",
+    )
+    val shape = RoundedCornerShape(24.dp)
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val backdrop = LocalLiquidGlassBackdrop.current
+    val useNativeGlass = backdrop != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val surfaceModifier = if (useNativeGlass) {
+        Modifier.drawBackdrop(
+            backdrop = backdrop!!,
+            shape = { shape },
+            effects = {
+                vibrancy()
+                blur(4.dp.toPx())
+                lens(
+                    refractionHeight = 16.dp.toPx(),
+                    refractionAmount = 28.dp.toPx(),
+                    depthEffect = true,
+                    chromaticAberration = true,
+                )
+            },
+            highlight = { Highlight.Ambient },
+            shadow = {
+                Shadow.Default.copy(
+                    radius = 16.dp,
+                    color = Color.Black.copy(alpha = 0.18f),
+                )
+            },
+            layerBlock = {
+                scaleX = scale
+                scaleY = scale
+            },
+            onDrawSurface = {
+                drawRect(
+                    Brush.verticalGradient(
+                        listOf(
+                            container.copy(alpha = 0.3f),
+                            lerp(container, surfaceColor, 0.42f)
+                                .copy(alpha = 0.18f),
+                        )
+                    )
+                )
+                drawRect(
+                    Brush.radialGradient(
+                        listOf(Color.White.copy(alpha = 0.18f), Color.Transparent),
+                        center = Offset(size.width * 0.18f, 0f),
+                        radius = size.maxDimension * 0.85f,
+                    )
+                )
+            },
+        )
+    } else {
+        Modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .shadow(
+                elevation = 16.dp,
+                shape = shape,
+                clip = false,
+                ambientColor = Color.Black.copy(alpha = 0.18f),
+                spotColor = contentColor.copy(alpha = 0.18f),
+            )
+            .clip(shape)
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        container.copy(alpha = 0.92f),
+                        lerp(container, surfaceColor, 0.3f)
+                            .copy(alpha = 0.76f),
+                    )
+                )
+            )
+            .border(
+                1.dp,
+                Color.White.copy(alpha = 0.22f),
+                shape,
+            )
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(surfaceModifier)
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                onClick = onClick,
+            ),
+    ) {
+        Canvas(Modifier.matchParentSize()) {
+            drawRect(
+                brush = Brush.verticalGradient(
+                    listOf(
+                        Color.White.copy(alpha = 0.2f),
+                        Color.Transparent,
+                    ),
+                    endY = size.height * 0.64f,
+                )
+            )
+            drawCircle(
+                brush = Brush.radialGradient(
+                    listOf(
+                        contentColor.copy(alpha = 0.12f),
+                        Color.Transparent,
+                    ),
+                    center = Offset(size.width * 0.18f, size.height * 0.5f),
+                    radius = size.height * 0.95f,
+                ),
+                radius = size.height * 0.95f,
+                center = Offset(size.width * 0.18f, size.height * 0.5f),
+            )
+        }
+        Row(
+            Modifier.fillMaxWidth().padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            LiquidGlassIconDisc(discSize = 58.dp) {
+                Text(
+                    badge,
+                    fontSize = if (badge.length == 1) 21.sp else 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = contentColor,
+                )
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text(title, fontSize = 19.sp, fontWeight = FontWeight.Bold, color = contentColor)
+                Text(
+                    subtitle,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp,
+                    color = contentColor.copy(alpha = 0.88f),
+                )
+            }
+            Text("›", fontSize = 28.sp, color = contentColor.copy(alpha = 0.72f))
+        }
+    }
+}
+
+@Composable
+private fun IlifeProfileScreen(
+    onBack: () -> Unit,
+    onOpenAppearance: () -> Unit,
+    appThemeMode: ThemeMode,
+) {
+    val context = LocalContext.current
+    val viewModel: DashboardViewModel = viewModel()
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    fun refreshData() {
+        viewModel.reloadAccounts(resetScore = true)
+        val account = AccountStore.getCurrent(context.applicationContext) ?: return
+        val token = account.token?.takeIf(String::isNotBlank)
+            ?: account.appToken?.takeIf(String::isNotBlank)
+            ?: return
+        val useApp = !account.hasToken()
+        IlifeApi.missionLstWithToken(token, useApp) { json, _ ->
+            LoginStatusStore.record(account, useApp, TokenValidity.from(json))
+            val score = json?.takeIf { it.optInt("code", -1) == 0 }
+                ?.optJSONObject("data")
+                ?.optJSONObject("accScoreRsp")
+                ?.optInt("validScore")
+            viewModel.setCurrentScoreData(score = score)
+        }
+        IlifeApi.scoreLstWithToken(token) { json, _ ->
+            viewModel.setCurrentScoreData(logs = json)
+        }
+        val walletToken = account.appToken?.takeIf(String::isNotBlank) ?: token
+        IlifeApi.walletOwnerWithToken(walletToken) { json, error ->
+            val balance = runCatching {
+                json?.let { WalletResponseParser.dashboardBalance(it, account.eid) }
+            }.getOrNull()
+            viewModel.setCurrentWalletData(
+                balance,
+                if (balance == null) error ?: "钱包刷新失败，请稍后重试" else null,
+            )
+        }
+    }
+
+    LaunchedEffect(Unit) { refreshData() }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) refreshData()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val libraryTheme = when (appThemeMode) {
+        ThemeMode.SYSTEM -> HuishengThemeMode.SYSTEM
+        ThemeMode.LIGHT -> HuishengThemeMode.LIGHT
+        ThemeMode.DARK -> HuishengThemeMode.DARK
+    }
+    LaunchedEffect(appThemeMode) {
+        ThemeSettings.setMode(context.applicationContext, libraryTheme)
+    }
+
+    Column(Modifier.fillMaxSize().statusBarsPadding()) {
+        PageHeader(title = "慧生活我的", onBack = onBack)
+        HuishengMineContent(
+            state = state.summary,
+            onLogin = {
+                val account = AccountStore.getCurrent(context.applicationContext)
+                val intent = if (account?.phone.isNullOrBlank()) {
+                    Intent(context, LoginActivity::class.java)
+                } else {
+                    LoginActivity.reloginIntent(context, account.phone, true)
+                }
+                context.startActivity(intent)
+            },
+            onAccounts = { context.startActivity(Intent(context, AccountsActivity::class.java)) },
+            onScores = { context.startActivity(Intent(context, ScoreActivity::class.java)) },
+            onWallet = { context.startActivity(Intent(context, WalletActivity::class.java)) },
+            themeMode = libraryTheme,
+            onOpenAppearance = onOpenAppearance,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
 private fun ProfileScreen(
     waterVm: WaterViewModel,
+    onBack: () -> Unit,
     onSyncAccount: () -> Unit,
     onOpenOfficial: () -> Unit,
     onOpenOrders: () -> Unit,
@@ -807,18 +1530,16 @@ private fun ProfileScreen(
     Column(
         Modifier
             .fillMaxSize()
+            .statusBarsPadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Column {
-            Text("我的", fontSize = 28.sp, fontWeight = FontWeight.Bold)
-            Text(
-                "登录、订单与本地设置",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        LiquidGlassHeader(
+            title = "天猫校园我的",
+            subtitle = "登录、订单与地址",
+            onBack = onBack,
+        )
 
         AccountCard(
             loggedIn = state.loggedIn,
@@ -831,10 +1552,9 @@ private fun ProfileScreen(
             onOpenShizuku = onOpenShizuku,
         )
 
-        Card(
-            Modifier.fillMaxWidth(),
+        LiquidGlassPanel(
+            modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         ) {
             Column(Modifier.padding(vertical = 6.dp)) {
                 ProfileRow("我的订单", "在官方应用中查看校园订单", onOpenOrders)
@@ -872,14 +1592,12 @@ private fun AccountCard(
     onOpenOfficial: () -> Unit,
     onOpenShizuku: () -> Unit,
 ) {
-    Card(
-        Modifier.fillMaxWidth(),
+    LiquidGlassPanel(
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-        ),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
     ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
                 if (loggedIn) "已同步官方登录" else "登录天猫校园",
                 fontSize = 19.sp,
@@ -893,7 +1611,7 @@ private fun AccountCard(
                     else -> "先在官方天猫校园登录，再回到这里同步一次。"
                 },
                 fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (error != null) {
                 Text(error, fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
@@ -916,7 +1634,7 @@ private fun AccountCard(
             Text(
                 "同步通过 Shizuku 完成，只读取官方应用的登录态，不修改官方应用。",
                 fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.68f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.82f),
             )
             TextButton(onClick = onOpenShizuku) {
                 Text("打开 Shizuku 管理器", fontSize = 12.sp)
@@ -973,25 +1691,16 @@ private fun SettingsScreen(
     Column(
         Modifier
             .fillMaxSize()
+            .statusBarsPadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Row(
-            Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            OutlinedButton(onClick = onBack) { Text("返回") }
-            Column {
-                Text("界面设置", fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                Text(
-                    "首页布局与应用外观",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
+        LiquidGlassHeader(
+            title = "界面设置",
+            subtitle = "首页布局与应用外观",
+            onBack = onBack,
+        )
 
         SettingsCard(
             title = "首页模块",
@@ -1093,18 +1802,9 @@ private fun SettingsCard(
     subtitle: String,
     content: @Composable () -> Unit,
 ) {
-    Card(
-        Modifier
-            .fillMaxWidth()
-            .border(
-                width = 1.dp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
-                shape = RoundedCornerShape(22.dp),
-            ),
+    LiquidGlassPanel(
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.84f),
-        ),
     ) {
         Column {
             Column(Modifier.padding(horizontal = 18.dp, vertical = 16.dp)) {
@@ -1207,16 +1907,12 @@ private fun ThemeChoiceRow(
 
 @Composable
 private fun PageHeader(title: String, onBack: () -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        OutlinedButton(onClick = onBack) { Text("返回") }
-        Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-    }
+    LiquidGlassHeader(
+        title = title,
+        subtitle = "返回上一级",
+        onBack = onBack,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+    )
 }
 
 private fun openOfficialCampus(context: Context) {

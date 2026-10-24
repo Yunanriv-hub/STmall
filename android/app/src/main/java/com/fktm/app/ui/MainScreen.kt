@@ -229,7 +229,7 @@ private fun AboutCard() {
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                "参考项目作者：牧冷",
+                "参考项目作者：牧冷 · nocookies111",
                 fontSize = 11.sp,
                 lineHeight = 16.sp,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),

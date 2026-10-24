@@ -10,14 +10,20 @@ import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -27,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
@@ -40,6 +47,8 @@ import com.google.zxing.DecodeHintType
 import com.google.zxing.MultiFormatReader
 import com.google.zxing.PlanarYUVLuminanceSource
 import com.google.zxing.common.HybridBinarizer
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -58,6 +67,7 @@ fun QrScannerScreen(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val glassBackdrop = rememberLayerBackdrop()
 
     var granted by remember {
         mutableStateOf(
@@ -117,36 +127,74 @@ fun QrScannerScreen(
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
-        if (granted) {
-            AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
-        } else {
-            Column(
-                modifier = Modifier.align(Alignment.Center).padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+    CompositionLocalProvider(LocalLiquidGlassBackdrop provides glassBackdrop) {
+        Box(Modifier.fillMaxSize()) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+                    .layerBackdrop(glassBackdrop)
             ) {
-                Text("需要相机权限才能扫码", fontSize = 15.sp)
-                Button(onClick = { launcher.launch(Manifest.permission.CAMERA) }) {
-                    Text("授予权限")
+                if (granted) {
+                    AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
+                } else {
+                    LiquidGlassAmbientBackground(
+                        darkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
+                    )
+                    Column(
+                        modifier = Modifier.align(Alignment.Center).padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text("需要相机权限才能扫码", fontSize = 15.sp)
+                        Button(onClick = { launcher.launch(Manifest.permission.CAMERA) }) {
+                            Text("授予权限")
+                        }
+                        Button(onClick = onClose) { Text("手动输入") }
+                    }
                 }
-                Button(onClick = onClose) { Text("手动输入") }
             }
-        }
 
-        // 取景框提示 + 关闭
-        Text(
-            "把饮水机上的二维码放进框内",
-            color = Color.White,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = 96.dp),
-        )
-        Button(
-            onClick = onClose,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 48.dp),
-        ) {
-            Text("取消")
+            LiquidGlassHeader(
+                title = "扫一扫",
+                subtitle = "二维码识别",
+                onBack = onClose,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+
+            LiquidGlassPanel(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 92.dp),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(50),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    horizontal = 16.dp,
+                    vertical = 9.dp,
+                ),
+            ) {
+                Text(
+                    "把二维码放进取景框",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+
+            LiquidGlassPanel(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(bottom = 24.dp),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(50),
+            ) {
+                TextButton(onClick = onClose, modifier = Modifier.padding(horizontal = 12.dp)) {
+                    Text("取消扫码")
+                }
+            }
         }
     }
 
