@@ -228,7 +228,7 @@ private fun PangguaiLoginCard(
         ) {
             Text("登录胖乖生活", fontSize = 19.sp, fontWeight = FontWeight.Bold)
             Text(
-                "手机号只用于向 userapi.qiekj.com 请求短信验证码。Token 由 STmall 使用 Android Keystore 加密保存在本机。",
+                "手机号只用于向 userapi.qiekj.com 请求短信验证码。Token 由 Cumpus 使用 Android Keystore 加密保存在本机。",
                 fontSize = 11.sp,
                 lineHeight = 17.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -119,7 +119,7 @@ object WaterSession {
                 }
             }
             ShizukuFileAccess.Result.PermissionDenied -> {
-                lastError = "请在 Shizuku 中允许「STmall」，然后再次点击同步"
+                lastError = "请在 Shizuku 中允许「Cumpus」，然后再次点击同步"
             }
             ShizukuFileAccess.Result.NotRunning -> {
                 lastError = "Shizuku 未运行；无 Root 手机请用无线调试或电脑 ADB 启动"

@@ -262,7 +262,7 @@ fun UjingFeatureScreen(
                         vm.refreshMyOrders()
                     },
                     onExport = {
-                        exportLauncher.launch("STmall-U净设备-${LocalDate.now()}.json")
+                        exportLauncher.launch("Cumpus-U净设备-${LocalDate.now()}.json")
                     },
                     onImport = {
                         importLauncher.launch(arrayOf("application/json", "text/*", "*/*"))

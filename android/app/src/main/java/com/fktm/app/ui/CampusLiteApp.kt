@@ -838,7 +838,7 @@ private fun CampusHome(
             if (!hasHomeAction) {
                 Spacer(Modifier.weight(0.72f))
                 Text(
-                    "STmall",
+                    "Cumpus",
                     fontSize = if (compact) 11.sp else 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     letterSpacing = 2.6.sp,
@@ -2754,7 +2754,7 @@ private fun SettingsScreen(
 
         SettingsCard(
             title = "关于与安全",
-            subtitle = "STmall ${BuildConfig.VERSION_NAME}",
+            subtitle = "Cumpus ${BuildConfig.VERSION_NAME}",
         ) {
             Column(
                 Modifier.padding(horizontal = 16.dp, vertical = 12.dp),

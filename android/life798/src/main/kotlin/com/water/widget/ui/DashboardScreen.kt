@@ -386,7 +386,7 @@ fun DashboardScreen(
                 IconButton(onClick = onBack) {
                     Icon(
                         Icons.AutoMirrored.Rounded.ArrowBack,
-                        contentDescription = "返回 STmall 首页",
+                        contentDescription = "返回 Cumpus 首页",
                     )
                 }
             }
@@ -964,8 +964,8 @@ fun HuishengMineContent(
                 themeMode = themeMode,
                 onOpenAppearanceSettings = onOpenAppearance,
                 onOpenSupport = {},
-                updateStatus = "随 STmall 一起更新",
-                autoUpdateLabel = "由 STmall 管理",
+                updateStatus = "随 Cumpus 一起更新",
+                autoUpdateLabel = "由 Cumpus 管理",
                 onCheckUpdate = {},
                 onUpdateSettings = {},
                 onProject = {},

@@ -1,10 +1,10 @@
 {
   "channel": "stable",
-  "versionName": "0.6.0",
-  "versionCode": 25,
+  "versionName": "0.6.1",
+  "versionCode": 26,
   "isReady": false,
   "minVersionCode": 1,
-  "releaseNotes": "STmall 0.6.0：新增完美校园绑定房间与水电用量只读查询，不含健康打卡、校内签到、定位、粮票任务或自动提交。项目继续只通过本地 APK 分发。",
+  "releaseNotes": "Cumpus 0.6.1：软件名称更新为 Cumpus，启用新 C 形图标，并保留完美校园水电只读查询。项目继续只通过本地 APK 分发。",
   "releaseUrl": "",
   "assets": []
 }

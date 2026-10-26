@@ -1,7 +1,7 @@
 <div align="center">
   <img src="docs/images/stmall-icon.png" width="112" alt="STmall icon">
 
-  <h1>STmall</h1>
+  <h1>Cumpus</h1>
 
   <p>面向校园高频场景的独立 Android 客户端</p>
 
@@ -23,7 +23,7 @@
 > 服务商没有隶属、授权或合作关系。请仅使用自己的账号，并只操作自己有权使用
 > 的门锁和设备。**
 
-STmall 将天猫校园的智能宿舍、蓝牙门锁、校园饮水，以及慧生活798的多账户、
+Cumpus 将天猫校园的智能宿舍、蓝牙门锁、校园饮水，以及慧生活798的多账户、
 钱包、积分、账单、设备标签等高频入口集中到一个无广告首页。项目不会修改、
 注入或重新签名官方应用。
 
@@ -187,13 +187,13 @@ android/app/build/outputs/apk/release/app-release.apk
 
 | 项目 | 值 |
 |---|---|
-| 版本 | `0.6.0` |
-| versionCode | `25` |
+| 版本 | `0.6.1` |
+| versionCode | `26` |
 | 包名 | `com.rea.campuslite` |
 | minSdk | `26` |
 | targetSdk | `36` |
-| Release APK | `STmall_0.6.0.apk` |
-| SHA-256 | `896A5456A3E7ED7E2BF15CB25E38B2C37196F8BAB54305860F482146622E13DF` |
+| Release APK | `Cumpus_0.6.1.apk` |
+| SHA-256 | `E3A09D101274BAC2B617BFB47D4B2810593128E7C700949275460295AB2AF1CC` |
 
 该版本已通过 277 项 JVM 单元测试、release 编译、Android Lint 关键检查和
 v2 签名校验。

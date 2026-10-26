@@ -58,7 +58,7 @@ fun UpdateCard(repo: AppUpdateRepository, settings: UpdateSettings) {
         Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Text("在线更新已暂停", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             Text(
-                "STmall 已暂时闭源并停止 GitHub 更新，本机不会自动检查或下载新版本。",
+                "Cumpus 已暂时闭源并停止 GitHub 更新，本机不会自动检查或下载新版本。",
                 fontSize = 12.sp,
                 lineHeight = 18.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
