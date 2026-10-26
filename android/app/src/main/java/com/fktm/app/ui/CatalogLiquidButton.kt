@@ -3,6 +3,8 @@ package com.fktm.app.ui
 import android.os.Build
 import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -23,17 +25,20 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.IconButton as MaterialIconButton
 import androidx.compose.material3.OutlinedButton as MaterialOutlinedButton
+import androidx.compose.material3.RadioButton as MaterialRadioButton
 import androidx.compose.material3.TextButton as MaterialTextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.unit.dp
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
@@ -69,7 +74,7 @@ internal fun CatalogLiquidButton(
             modifier = modifier,
             enabled = enabled,
             shape = shape,
-            elevation = elevation,
+            elevation = null,
             border = border,
             contentPadding = contentPadding,
             interactionSource = interactionSource,
@@ -362,6 +367,108 @@ internal fun CatalogLiquidFilterChip(
             leadingIcon?.invoke()
             label()
             trailingIcon?.invoke()
+        }
+    }
+}
+
+@Composable
+internal fun CatalogLiquidRadioButton(
+    selected: Boolean,
+    onClick: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    val backdrop = LocalLiquidGlassBackdrop.current
+    val glassEnabled = LocalLiquidGlassEnabled.current
+    if (!glassEnabled || backdrop == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+        MaterialRadioButton(
+            selected = selected,
+            onClick = onClick,
+            modifier = modifier,
+            enabled = enabled,
+        )
+        return
+    }
+
+    val interaction = remember { MutableInteractionSource() }
+    val catalogInteraction = rememberCatalogGlassInteraction()
+    val view = LocalView.current
+    val accent = MaterialTheme.colorScheme.primary
+    val outline = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.34f)
+    val clickModifier = if (onClick == null) {
+        Modifier.semantics {
+            role = Role.RadioButton
+            this.selected = selected
+        }
+    } else {
+        Modifier.selectable(
+            selected = selected,
+            enabled = enabled,
+            role = Role.RadioButton,
+            interactionSource = interaction,
+            indication = null,
+        ) {
+            view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+            onClick()
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .size(40.dp)
+            .drawBackdrop(
+                backdrop = backdrop,
+                shape = { RoundedCornerShape(percent = 50) },
+                effects = {
+                    vibrancy()
+                    blur(1.5.dp.toPx())
+                    lens(
+                        refractionHeight = 7.dp.toPx(),
+                        refractionAmount = 14.dp.toPx(),
+                        depthEffect = true,
+                        chromaticAberration = true,
+                    )
+                },
+                highlight = { Highlight.Ambient.copy(alpha = if (enabled) 0.82f else 0.35f) },
+                shadow = {
+                    Shadow(radius = 4.dp, color = Color.Black.copy(alpha = 0.08f))
+                },
+                layerBlock = {
+                    catalogPressTransform(
+                        catalogInteraction,
+                        1f + 3.dp.toPx() / size.height.coerceAtLeast(1f),
+                    )
+                },
+                onDrawSurface = {
+                    drawRect(
+                        MaterialTheme.colorScheme.surface.copy(
+                            alpha = if (enabled) 0.18f else 0.08f,
+                        )
+                    )
+                },
+            )
+            .then(catalogInteraction.clippedModifier(RoundedCornerShape(percent = 50)))
+            .then(catalogInteraction.gestureModifier)
+            .then(clickModifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier
+                .size(20.dp)
+                .clip(RoundedCornerShape(percent = 50))
+                .border(
+                    width = if (selected) 2.dp else 1.dp,
+                    color = if (selected) accent else outline,
+                    shape = RoundedCornerShape(percent = 50),
+                )
+        )
+        if (selected) {
+            Box(
+                Modifier
+                    .size(10.dp)
+                    .clip(RoundedCornerShape(percent = 50))
+                    .background(accent)
+            )
         }
     }
 }

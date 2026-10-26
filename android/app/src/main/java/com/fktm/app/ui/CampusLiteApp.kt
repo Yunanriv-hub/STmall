@@ -3,10 +3,12 @@ package com.fktm.app.ui
 import android.animation.ValueAnimator
 import android.content.Context
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -27,6 +29,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -37,6 +40,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -59,7 +63,7 @@ import com.fktm.app.ui.CatalogLiquidFilterChip as FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import com.fktm.app.ui.CatalogLiquidOutlinedButton as OutlinedButton
-import androidx.compose.material3.RadioButton
+import com.fktm.app.ui.CatalogLiquidRadioButton as RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import com.fktm.app.ui.CatalogLiquidTextButton as TextButton
@@ -70,6 +74,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -82,12 +87,14 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -98,6 +105,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -117,6 +125,8 @@ import com.fktm.app.ujing.ui.UjingFeatureScreen
 import com.fktm.app.vm.UnlockViewModel
 import com.fktm.app.vm.UnlockState
 import com.fktm.app.vm.WaterViewModel
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.kyant.backdrop.drawBackdrop
@@ -142,6 +152,8 @@ import com.water.widget.WaterService
 import com.water.widget.ui.DashboardViewModel
 import com.water.widget.ui.HuishengMineContent
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private enum class CampusPage {
     Home,
@@ -216,6 +228,12 @@ private enum class HomeModule(
         "首页圆形慧生活接水按钮",
         ModuleSection.HOME,
     ),
+    UjingScanner(
+        AppPreferences.MODULE_UJING_SCAN,
+        "U净扫一扫",
+        "扫描机身二维码直达设备",
+        ModuleSection.HOME,
+    ),
 }
 
 /**
@@ -235,6 +253,9 @@ fun CampusLiteApp(
     glassEnabled: Boolean,
     onThemeModeChange: (ThemeMode) -> Unit,
     onGlassEnabledChange: (Boolean) -> Unit,
+    backgroundImageUri: String? = null,
+    onPickBackgroundImage: () -> Unit = {},
+    onClearBackgroundImage: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as FktmApp
@@ -244,9 +265,25 @@ fun CampusLiteApp(
     var page by rememberSaveable { mutableStateOf(CampusPage.Home) }
     var settingsOrigin by rememberSaveable { mutableStateOf(CampusPage.Home) }
     var detailOrigin by rememberSaveable { mutableStateOf(CampusPage.Home) }
+    var ujingOrigin by rememberSaveable { mutableStateOf(CampusPage.Features) }
     var dormSection by rememberSaveable { mutableIntStateOf(0) }
     var showLockPicker by remember { mutableStateOf(false) }
     var themeReveal by remember { mutableStateOf<ThemeRevealSpec?>(null) }
+    val ujingVm: UjingViewModel = viewModel()
+    val homeUjingScanOptions = remember {
+        ScanOptions().apply {
+            setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+            setPrompt("对准 U净设备机身上的二维码")
+            setBeepEnabled(false)
+            setOrientationLocked(true)
+        }
+    }
+    val homeUjingScanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
+        val raw = result.contents?.takeIf(String::isNotBlank) ?: return@rememberLauncherForActivityResult
+        ujingVm.onScan(raw)
+        ujingOrigin = CampusPage.Home
+        page = CampusPage.Ujing
+    }
     var enabledModules by remember {
         mutableStateOf(
             HomeModule.entries
@@ -283,10 +320,10 @@ fun CampusLiteApp(
             CampusPage.Settings -> settingsOrigin
             CampusPage.TmallProfile,
             CampusPage.IlifeProfile,
-            -> CampusPage.MyHub
+            -> detailOrigin
 
             CampusPage.SmartDorm -> detailOrigin
-            CampusPage.Ujing -> CampusPage.Features
+            CampusPage.Ujing -> ujingOrigin
             CampusPage.Features,
             CampusPage.MyHub,
             -> CampusPage.Home
@@ -335,8 +372,23 @@ fun CampusLiteApp(
                             )
                         .background(MaterialTheme.colorScheme.background)
                 ) {
+                    BackgroundImageLayer(
+                        uri = backgroundImageUri,
+                        darkTheme = darkTheme,
+                    )
                     if (glassEnabled) {
                         LiquidGlassAmbientBackground(darkTheme)
+                    }
+                    themeReveal?.let { spec ->
+                        ThemeRevealOverlay(
+                            spec = spec,
+                            onCovered = {
+                                onThemeModeChange(
+                                    if (spec.targetDark) ThemeMode.DARK else ThemeMode.LIGHT
+                                )
+                            },
+                            onFinished = { themeReveal = null },
+                        )
                     }
                 }
                 CompositionLocalProvider(
@@ -353,7 +405,7 @@ fun CampusLiteApp(
                                 expandFrom = Alignment.Top,
                             ),
                             exit = shrinkVertically(
-                                animationSpec = tween(180),
+                                animationSpec = tween(0),
                                 shrinkTowards = Alignment.Top,
                             ),
                         ) {
@@ -431,13 +483,17 @@ fun CampusLiteApp(
                         dormSection = 0
                         page = CampusPage.SmartDorm
                     },
-                    onIlife = { page = CampusPage.IlifeProfile },
+                    onIlife = {
+                        detailOrigin = CampusPage.Home
+                        page = CampusPage.IlifeProfile
+                    },
                     credential = (context.applicationContext as FktmApp)
                         .credentialStore.primary(),
                     onChangeDefaultLock = { showLockPicker = true },
                     unlockState = lockVm.state,
                     onQuickUnlock = onQuickUnlock,
                     onOpenSettings = { openSettings(CampusPage.Home) },
+                    onUjingScan = { homeUjingScanLauncher.launch(homeUjingScanOptions) },
                     enabledModules = enabledModules,
                     darkTheme = darkTheme,
                 )
@@ -449,8 +505,14 @@ fun CampusLiteApp(
                         dormSection = 0
                         page = CampusPage.SmartDorm
                     },
-                    onIlife = { page = CampusPage.IlifeProfile },
-                    onUjing = { page = CampusPage.Ujing },
+                    onIlife = {
+                        detailOrigin = CampusPage.Features
+                        page = CampusPage.IlifeProfile
+                    },
+                    onUjing = {
+                        ujingOrigin = CampusPage.Features
+                        page = CampusPage.Ujing
+                    },
                     onOpenSettings = { openSettings(CampusPage.Features) },
                 )
 
@@ -465,22 +527,31 @@ fun CampusLiteApp(
                 )
 
                 CampusPage.Ujing -> {
-                    val ujingVm: UjingViewModel = viewModel()
                     UjingFeatureScreen(
                         vm = ujingVm,
-                        onBack = { page = CampusPage.Features },
+                        onBack = { page = ujingOrigin },
                         onRequestBlePermissions = onRequestBlePermissions,
                     )
                 }
 
                 CampusPage.MyHub -> MyHubScreen(
-                    onTmall = { page = CampusPage.TmallProfile },
-                    onIlife = { page = CampusPage.IlifeProfile },
+                    onTmall = {
+                        detailOrigin = CampusPage.MyHub
+                        page = CampusPage.TmallProfile
+                    },
+                    onIlife = {
+                        detailOrigin = CampusPage.MyHub
+                        page = CampusPage.IlifeProfile
+                    },
+                    onUjing = {
+                        ujingOrigin = CampusPage.MyHub
+                        page = CampusPage.Ujing
+                    },
                 )
 
                 CampusPage.TmallProfile -> ProfileScreen(
                     waterVm = waterVm,
-                    onBack = { page = CampusPage.MyHub },
+                    onBack = { page = detailOrigin },
                     onSyncAccount = { waterVm.importFromDevice(context.applicationContext) },
                     onOpenOfficial = { openOfficialCampus(context) },
                     onOpenOrders = { openOfficialOrders(context) },
@@ -489,7 +560,7 @@ fun CampusLiteApp(
                 )
 
                 CampusPage.IlifeProfile -> IlifeProfileScreen(
-                    onBack = { page = CampusPage.MyHub },
+                    onBack = { page = detailOrigin },
                     onOpenAppearance = { openSettings(CampusPage.IlifeProfile) },
                     appThemeMode = themeMode,
                 )
@@ -503,6 +574,9 @@ fun CampusLiteApp(
                     onThemeModeChange = onThemeModeChange,
                     onModuleToggle = ::setModuleEnabled,
                     onResetModules = ::resetModules,
+                    backgroundImageUri = backgroundImageUri,
+                    onPickBackgroundImage = onPickBackgroundImage,
+                    onClearBackgroundImage = onClearBackgroundImage,
                     onBack = { page = settingsOrigin },
                 )
             }
@@ -519,8 +593,8 @@ fun CampusLiteApp(
                     animationSpec = tween(260, easing = FastOutSlowInEasing),
                     initialScale = 0.9f,
                 ),
-                exit = fadeOut(tween(140)) + scaleOut(
-                    animationSpec = tween(160),
+                exit = fadeOut(tween(0)) + scaleOut(
+                    animationSpec = tween(0),
                     targetScale = 0.9f,
                 ),
                 modifier = Modifier
@@ -568,7 +642,9 @@ fun CampusLiteApp(
                         page == CampusPage.Home -> 0
                         page == CampusPage.Features ||
                             page == CampusPage.SmartDorm ||
-                            page == CampusPage.Ujing -> 1
+                            page == CampusPage.Ujing && ujingOrigin == CampusPage.Features -> 1
+                        page == CampusPage.Ujing && ujingOrigin == CampusPage.MyHub -> 2
+                        page == CampusPage.Ujing -> 0
                         else -> 2
                     },
                     onSelected = { index ->
@@ -598,19 +674,39 @@ fun CampusLiteApp(
                 )
             }
 
-        themeReveal?.let { spec ->
-            ThemeRevealOverlay(
-                spec = spec,
-                onCovered = {
-                    onThemeModeChange(
-                        if (spec.targetDark) ThemeMode.DARK else ThemeMode.LIGHT
-                    )
-                },
-                onFinished = { themeReveal = null },
-            )
-        }
     }
 }
+}
+
+@Composable
+private fun BackgroundImageLayer(uri: String?, darkTheme: Boolean) {
+    if (uri.isNullOrBlank()) return
+    val context = LocalContext.current
+    val bitmap by produceState<ImageBitmap?>(initialValue = null, uri) {
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                context.contentResolver.openInputStream(Uri.parse(uri))
+                    ?.use(BitmapFactory::decodeStream)
+                    ?.asImageBitmap()
+            }.getOrNull()
+        }
+    }
+    bitmap?.let { image ->
+        Image(
+            bitmap = image,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(
+                    if (darkTheme) Color.Black.copy(alpha = 0.48f)
+                    else Color.White.copy(alpha = 0.38f)
+                )
+        )
+    }
 }
 
 @Composable
@@ -622,12 +718,15 @@ private fun CampusHome(
     onQuickUnlock: () -> Unit,
     onChangeDefaultLock: () -> Unit,
     onOpenSettings: () -> Unit,
+    onUjingScan: () -> Unit,
     enabledModules: Set<HomeModule>,
     darkTheme: Boolean,
 ) {
     val quickEnabled = HomeModule.QuickUnlock in enabledModules
     val quickWaterEnabled = HomeModule.QuickWater in enabledModules
+    val ujingScanEnabled = HomeModule.UjingScanner in enabledModules
     val quickCount = listOf(quickEnabled, quickWaterEnabled).count { it }
+    val hasHomeAction = quickCount > 0 || ujingScanEnabled
 
     BoxWithConstraints(
         Modifier
@@ -642,7 +741,7 @@ private fun CampusHome(
                 .padding(top = 8.dp, bottom = if (compact) 18.dp else 30.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            if (quickCount == 0) {
+            if (!hasHomeAction) {
                 Spacer(Modifier.weight(0.72f))
                 Text(
                     "STmall",
@@ -667,34 +766,75 @@ private fun CampusHome(
                 Spacer(Modifier.height(if (compact) 18.dp else 34.dp))
                 EmptyHomeState(onOpenSettings = onOpenSettings)
             } else {
-                Spacer(Modifier.weight(if (quickCount == 1) 1.2f else 0.88f))
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(if (dense) 12.dp else 18.dp),
-                    verticalAlignment = Alignment.Top,
-                ) {
-                    if (quickEnabled) {
-                        QuickUnlockCircle(
-                            credential = credential,
-                            state = unlockState,
-                            onUnlock = onQuickUnlock,
-                            onManageLock = onSmartDorm,
-                            onChangeDefaultLock = onChangeDefaultLock,
-                            compact = compact,
-                            darkTheme = darkTheme,
-                            dense = dense,
-                        )
-                    }
-                    if (quickWaterEnabled) {
-                        HomeQuickWaterButton(
-                            compact = compact,
-                            darkTheme = darkTheme,
-                            dense = dense,
-                            onManage = onIlife,
-                        )
+                Spacer(Modifier.weight(if (quickCount <= 1) 1.2f else 0.88f))
+                if (quickCount > 0) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(if (dense) 12.dp else 18.dp),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        if (quickEnabled) {
+                            QuickUnlockCircle(
+                                credential = credential,
+                                state = unlockState,
+                                onUnlock = onQuickUnlock,
+                                onManageLock = onSmartDorm,
+                                onChangeDefaultLock = onChangeDefaultLock,
+                                compact = compact,
+                                darkTheme = darkTheme,
+                                dense = dense,
+                            )
+                        }
+                        if (quickWaterEnabled) {
+                            HomeQuickWaterButton(
+                                compact = compact,
+                                darkTheme = darkTheme,
+                                dense = dense,
+                                onManage = onIlife,
+                            )
+                        }
                     }
                 }
+                if (ujingScanEnabled) {
+                    Spacer(Modifier.height(if (compact) 14.dp else 22.dp))
+                    HomeUjingScanButton(
+                        compact = compact,
+                        onScan = onUjingScan,
+                    )
+                }
             }
-            Spacer(Modifier.weight(if (quickCount == 1) 0.72f else 1f))
+            Spacer(Modifier.weight(if (quickCount <= 1) 0.72f else 1f))
+        }
+    }
+}
+
+@Composable
+private fun HomeUjingScanButton(
+    compact: Boolean,
+    onScan: () -> Unit,
+) {
+    val accent = MaterialTheme.colorScheme.tertiary
+    OutlinedButton(
+        onClick = onScan,
+        modifier = Modifier
+            .height(if (compact) 58.dp else 64.dp)
+            .width(if (compact) 230.dp else 250.dp),
+        shape = RoundedCornerShape(percent = 50),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
+    ) {
+        ScannerGlyph(accent)
+        Spacer(Modifier.width(9.dp))
+        Column(horizontalAlignment = Alignment.Start) {
+            Text(
+                "U净扫一扫",
+                fontSize = if (compact) 13.sp else 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                "扫描机身二维码，直接进入设备",
+                fontSize = 9.5.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -806,6 +946,7 @@ private fun ModuleFeatureCard(
         HomeModule.Ujing -> if (darkTheme) Color(0xFFC7A7FF) else Color(0xFF6E4AB0)
         HomeModule.QuickUnlock -> MaterialTheme.colorScheme.primary
         HomeModule.QuickWater -> MaterialTheme.colorScheme.secondary
+        HomeModule.UjingScanner -> MaterialTheme.colorScheme.tertiary
     }
     val container = when (module) {
         HomeModule.SmartDorm -> if (darkTheme) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFE7F5F0)
@@ -813,6 +954,7 @@ private fun ModuleFeatureCard(
         HomeModule.Ujing -> if (darkTheme) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFF2ECFF)
         HomeModule.QuickUnlock -> MaterialTheme.colorScheme.surfaceVariant
         HomeModule.QuickWater -> MaterialTheme.colorScheme.surfaceVariant
+        HomeModule.UjingScanner -> MaterialTheme.colorScheme.surfaceVariant
     }
     val title = when (module) {
         HomeModule.SmartDorm -> "智能宿舍"
@@ -820,6 +962,7 @@ private fun ModuleFeatureCard(
         HomeModule.Ujing -> "U净"
         HomeModule.QuickUnlock -> "一键开门"
         HomeModule.QuickWater -> "一键接水"
+        HomeModule.UjingScanner -> "U净扫一扫"
     }
     val subtitle = when (module) {
         HomeModule.SmartDorm -> "门锁 · 饮水"
@@ -827,6 +970,7 @@ private fun ModuleFeatureCard(
         HomeModule.Ujing -> "洗衣 · 洗鞋 · 烘干"
         HomeModule.QuickUnlock -> "快速开门"
         HomeModule.QuickWater -> "默认饮水机"
+        HomeModule.UjingScanner -> "扫描机身二维码"
     }
     val onClick: () -> Unit = when (module) {
         HomeModule.SmartDorm -> ({ onSmartDorm() })
@@ -834,6 +978,7 @@ private fun ModuleFeatureCard(
         HomeModule.Ujing -> ({})
         HomeModule.QuickUnlock -> ({ onSmartDorm() })
         HomeModule.QuickWater -> ({ onIlife() })
+        HomeModule.UjingScanner -> ({})
     }
     FeatureCard(
         modifier = modifier,
@@ -846,6 +991,7 @@ private fun ModuleFeatureCard(
                 HomeModule.Ujing -> UjingGlyph(color)
                 HomeModule.QuickUnlock -> SmartDormGlyph(color)
                 HomeModule.QuickWater -> WaterDropGlyph(color)
+                HomeModule.UjingScanner -> ScannerGlyph(color)
             }
         },
         title = title,
@@ -1014,11 +1160,7 @@ private fun QuickUnlockCircle(
                 catalogPressTransform(catalogInteraction, 1.04f)
             }
             .clip(CircleShape)
-            .background(
-                Brush.radialGradient(
-                    listOf(containerTopColor, containerBottomColor),
-                )
-            )
+            .background(containerTopColor)
     }
 
     Column(
@@ -1752,6 +1894,7 @@ private fun SmartDormScreen(
 private fun MyHubScreen(
     onTmall: () -> Unit,
     onIlife: () -> Unit,
+    onUjing: () -> Unit,
 ) {
     Column(
         Modifier
@@ -1785,9 +1928,17 @@ private fun MyHubScreen(
             contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
             onClick = onIlife,
         )
+        MyHubEntryCard(
+            title = "U净账号",
+            subtitle = "洗衣机账号、已收藏设备与进行中的订单",
+            badge = "洗",
+            container = MaterialTheme.colorScheme.tertiaryContainer,
+            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+            onClick = onUjing,
+        )
 
         Text(
-            "两个平台分别登录、分别保存。敏感信息只保存在本机加密存储中。",
+            "各平台分别登录、分别保存。敏感信息只保存在本机加密存储中。",
             modifier = Modifier.padding(horizontal = 4.dp),
             fontSize = 11.sp,
             lineHeight = 17.sp,
@@ -1912,28 +2063,30 @@ private fun MyHubEntryCard(
             .then(catalogInteraction.clippedModifier(shape))
             .then(catalogInteraction.gestureModifier),
     ) {
-        Canvas(Modifier.matchParentSize()) {
-            drawRect(
-                brush = Brush.verticalGradient(
-                    listOf(
-                        Color.White.copy(alpha = 0.2f),
-                        Color.Transparent,
-                    ),
-                    endY = size.height * 0.64f,
+        if (glassEnabled) {
+            Canvas(Modifier.matchParentSize()) {
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        listOf(
+                            Color.White.copy(alpha = 0.2f),
+                            Color.Transparent,
+                        ),
+                        endY = size.height * 0.64f,
+                    )
                 )
-            )
-            drawCircle(
-                brush = Brush.radialGradient(
-                    listOf(
-                        contentColor.copy(alpha = 0.12f),
-                        Color.Transparent,
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        listOf(
+                            contentColor.copy(alpha = 0.12f),
+                            Color.Transparent,
+                        ),
+                        center = Offset(size.width * 0.18f, size.height * 0.5f),
+                        radius = size.height * 0.95f,
                     ),
-                    center = Offset(size.width * 0.18f, size.height * 0.5f),
                     radius = size.height * 0.95f,
-                ),
-                radius = size.height * 0.95f,
-                center = Offset(size.width * 0.18f, size.height * 0.5f),
-            )
+                    center = Offset(size.width * 0.18f, size.height * 0.5f),
+                )
+            }
         }
         Row(
             Modifier.fillMaxWidth().padding(20.dp),
@@ -2210,6 +2363,9 @@ private fun SettingsScreen(
     onThemeModeChange: (ThemeMode) -> Unit,
     onModuleToggle: (HomeModule, Boolean) -> Unit,
     onResetModules: () -> Unit,
+    backgroundImageUri: String?,
+    onPickBackgroundImage: () -> Unit,
+    onClearBackgroundImage: () -> Unit,
     onBack: () -> Unit,
 ) {
     Column(
@@ -2253,8 +2409,39 @@ private fun SettingsScreen(
         }
 
         SettingsCard(
+            title = "背景图片",
+            subtitle = "选择本机图片作为主页、功能页和我的页背景；图片只在本机读取。",
+        ) {
+            Column(
+                Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    if (backgroundImageUri == null) "当前使用默认背景" else "已设置自定义背景",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(
+                        onClick = onPickBackgroundImage,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("选择图片")
+                    }
+                    OutlinedButton(
+                        onClick = onClearBackgroundImage,
+                        enabled = backgroundImageUri != null,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("恢复默认")
+                    }
+                }
+            }
+        }
+
+        SettingsCard(
             title = "主页模块",
-            subtitle = "控制主页的两个快捷动作；功能入口统一放在功能页。",
+            subtitle = "控制主页快捷动作与 U净扫码入口；功能入口统一放在功能页。",
         ) {
             val homeModules = HomeModule.entries.filter { it.section == ModuleSection.HOME }
             homeModules.forEachIndexed { index, module ->

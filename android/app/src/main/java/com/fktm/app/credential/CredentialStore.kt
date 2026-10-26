@@ -161,6 +161,15 @@ class CredentialStore(context: Context) {
         }
     }
 
+    fun rename(address: String, name: String) {
+        val trimmed = name.trim().take(40)
+        if (trimmed.isBlank()) return
+        val updated = load().map {
+            if (it.address.equals(address, ignoreCase = true)) it.copy(name = trimmed) else it
+        }
+        persist(updated)
+    }
+
     fun clear() {
         prefs.edit().clear().apply()
     }

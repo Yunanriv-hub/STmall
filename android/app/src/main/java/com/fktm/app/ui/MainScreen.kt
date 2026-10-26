@@ -20,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import com.fktm.app.ui.CatalogLiquidButton as Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -29,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import com.fktm.app.ui.CatalogLiquidOutlinedButton as OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import com.fktm.app.ui.CatalogLiquidTextButton as TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -71,6 +73,8 @@ fun MainScreen(
 ) {
     val locks = vm.locks
     var showImport by remember { mutableStateOf(!vm.locks.any()) }
+    var renamingCredential by remember { mutableStateOf<LockCredential?>(null) }
+    var renameText by remember { mutableStateOf("") }
     val app = LocalContext.current.applicationContext as FktmApp
 
     // 从饮水页抓到新门锁凭证后，切回本页时刷新列表
@@ -143,6 +147,10 @@ fun MainScreen(
                         onRequestPermissions()
                         vm.readBattery(cred)
                     },
+                    onRename = {
+                        renamingCredential = cred
+                        renameText = cred.name
+                    },
                     onRemove = { vm.removeCredential(cred.address) },
                 )
                 Spacer(Modifier.height(14.dp))
@@ -181,6 +189,34 @@ fun MainScreen(
         }
 
         Spacer(Modifier.height(30.dp))
+    }
+
+    renamingCredential?.let { cred ->
+        AlertDialog(
+            onDismissRequest = { renamingCredential = null },
+            title = { Text("重命名门锁") },
+            text = {
+                OutlinedTextField(
+                    value = renameText,
+                    onValueChange = { renameText = it.take(40) },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("显示名称") },
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        vm.renameCredential(cred.address, renameText)
+                        renamingCredential = null
+                    },
+                    enabled = renameText.isNotBlank(),
+                ) { Text("保存") }
+            },
+            dismissButton = {
+                TextButton(onClick = { renamingCredential = null }) { Text("取消") }
+            },
+        )
     }
 }
 
@@ -223,6 +259,7 @@ private fun AboutCard() {
                 ) { Text("GitHub 仓库", fontSize = 13.sp) }
             }
         }
+
     }
 }
 
@@ -293,6 +330,7 @@ private fun LockCard(
     batteryText: String?,
     onUnlock: () -> Unit,
     onBattery: () -> Unit,
+    onRename: () -> Unit,
     onRemove: () -> Unit,
 ) {
     val working = state is UnlockState.Working
@@ -351,10 +389,14 @@ private fun LockCard(
 
             Spacer(Modifier.height(14.dp))
             Row {
+                OutlinedButton(onClick = onRename, enabled = !working, modifier = Modifier.weight(1f)) {
+                    Text("改名", fontSize = 13.sp)
+                }
+                Spacer(Modifier.width(8.dp))
                 OutlinedButton(onClick = onBattery, enabled = !working, modifier = Modifier.weight(1f)) {
                     Text("查电量", fontSize = 13.sp)
                 }
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(8.dp))
                 OutlinedButton(onClick = onRemove, enabled = !working, modifier = Modifier.weight(1f)) {
                     Text("删除", fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
                 }

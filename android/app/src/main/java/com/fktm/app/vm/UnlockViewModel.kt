@@ -95,6 +95,11 @@ class UnlockViewModel(app: Application) : AndroidViewModel(app) {
         refresh()
     }
 
+    fun renameCredential(address: String, name: String) {
+        store.rename(address, name)
+        refresh()
+    }
+
     /** 开锁主流程：后台线程跑 GATT，不阻塞 UI。 */
     fun unlock(cred: LockCredential) {
         if (state == UnlockState.Working) return

@@ -11,7 +11,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import com.water.widget.ui.CatalogLiquidTextButton as TextButton
 import androidx.compose.runtime.Composable
@@ -31,7 +30,7 @@ fun AutoUpdateSettingsDialog(policy: AutoUpdateCheck, onSelect: (AutoUpdateCheck
                 Row(modifier = Modifier.fillMaxWidth().selectable(selected = item == policy,
                     role = Role.RadioButton, onClick = { onSelect(item) }).padding(vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = item == policy, onClick = null)
+                    CatalogLiquidRadioButton(selected = item == policy, onClick = null)
                     Text(item.label, modifier = Modifier.padding(start = 8.dp))
                 }
             }

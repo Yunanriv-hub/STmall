@@ -215,6 +215,13 @@ private fun GlassIconButton(
                 ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
                 spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
             )
+            .clip(CircleShape)
+            .background(Brush.linearGradient(listOf(topColor, bottomColor)))
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.16f),
+                shape = CircleShape,
+            )
     } else {
         Modifier
             .graphicsLayer {
@@ -225,8 +232,6 @@ private fun GlassIconButton(
             }
             .clip(CircleShape)
             .background(MaterialTheme.colorScheme.surface)
-            .clip(CircleShape)
-            .background(Brush.linearGradient(listOf(topColor, bottomColor)))
             .border(
                 width = 1.dp,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.16f),
@@ -259,15 +264,17 @@ private fun GlassIconButton(
             .then(catalogInteraction.gestureModifier),
         contentAlignment = Alignment.Center,
     ) {
-        Box(
-            Modifier
-                .matchParentSize()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(Color.White.copy(alpha = 0.2f), Color.Transparent),
+        if (glassEnabled) {
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color.White.copy(alpha = 0.2f), Color.Transparent),
+                        )
                     )
-                )
-        )
+            )
+        }
         Text(
             glyph,
             fontSize = 20.sp,
@@ -554,18 +561,20 @@ internal fun LiquidGlassBottomBar(
                         }
                         .then(indicatorSurface),
                 ) {
-                    Box(
-                        Modifier
-                            .matchParentSize()
-                            .background(
-                            Brush.verticalGradient(
-                                listOf(
-                                    Color.White.copy(alpha = if (darkTheme) 0.1f else 0.22f),
-                                    Color.Transparent,
+                    if (glassEnabled) {
+                        Box(
+                            Modifier
+                                .matchParentSize()
+                                .background(
+                                    Brush.verticalGradient(
+                                        listOf(
+                                            Color.White.copy(alpha = if (darkTheme) 0.1f else 0.22f),
+                                            Color.Transparent,
+                                        )
+                                    )
                                 )
-                            )
-                        ),
-                    )
+                        )
+                    }
                 }
 
                 Row(Modifier.fillMaxSize()) {
@@ -813,7 +822,7 @@ internal fun LiquidGlassPanel(
         modifier
             .then(surfaceModifier)
     ) {
-        if (!useNativeGlass) {
+        if (glassEnabled && !useNativeGlass) {
             Canvas(Modifier.matchParentSize()) {
                 drawRect(
                     brush = Brush.verticalGradient(

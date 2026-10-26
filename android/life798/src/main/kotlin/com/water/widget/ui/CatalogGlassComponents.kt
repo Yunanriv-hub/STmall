@@ -11,6 +11,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -39,6 +40,7 @@ import androidx.compose.material3.IconButton as MaterialIconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton as MaterialOutlinedButton
+import androidx.compose.material3.RadioButton as MaterialRadioButton
 import androidx.compose.material3.Switch as MaterialSwitch
 import androidx.compose.material3.TextButton as MaterialTextButton
 import androidx.compose.runtime.Composable
@@ -70,6 +72,7 @@ import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -113,44 +116,46 @@ internal fun HuishengLiquidGlassHost(
         LocalHuishengGlassBackdrop provides backdrop,
         LocalHuishengGlassEnabled provides glassEnabled,
     ) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .then(if (glassEnabled) Modifier.layerBackdrop(backdrop) else Modifier)
-        ) {
-            if (glassEnabled) {
-                val primary = MaterialTheme.colorScheme.primary
-                val secondary = MaterialTheme.colorScheme.secondary
-                val tertiary = MaterialTheme.colorScheme.tertiary
-                Canvas(Modifier.fillMaxSize()) {
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            listOf(primary.copy(alpha = 0.18f), Color.Transparent),
+        Box(Modifier.fillMaxSize()) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+                    .then(if (glassEnabled) Modifier.layerBackdrop(backdrop) else Modifier)
+            ) {
+                if (glassEnabled) {
+                    val primary = MaterialTheme.colorScheme.primary
+                    val secondary = MaterialTheme.colorScheme.secondary
+                    val tertiary = MaterialTheme.colorScheme.tertiary
+                    Canvas(Modifier.fillMaxSize()) {
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                listOf(primary.copy(alpha = 0.18f), Color.Transparent),
+                                center = Offset(size.width * 0.08f, size.height * 0.16f),
+                                radius = size.width * 0.82f,
+                            ),
                             center = Offset(size.width * 0.08f, size.height * 0.16f),
                             radius = size.width * 0.82f,
-                        ),
-                        center = Offset(size.width * 0.08f, size.height * 0.16f),
-                        radius = size.width * 0.82f,
-                    )
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            listOf(secondary.copy(alpha = 0.12f), Color.Transparent),
+                        )
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                listOf(secondary.copy(alpha = 0.12f), Color.Transparent),
+                                center = Offset(size.width * 0.94f, size.height * 0.58f),
+                                radius = size.width * 0.7f,
+                            ),
                             center = Offset(size.width * 0.94f, size.height * 0.58f),
                             radius = size.width * 0.7f,
-                        ),
-                        center = Offset(size.width * 0.94f, size.height * 0.58f),
-                        radius = size.width * 0.7f,
-                    )
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            listOf(tertiary.copy(alpha = 0.1f), Color.Transparent),
+                        )
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                listOf(tertiary.copy(alpha = 0.1f), Color.Transparent),
+                                center = Offset(size.width * 0.24f, size.height * 0.96f),
+                                radius = size.width * 0.66f,
+                            ),
                             center = Offset(size.width * 0.24f, size.height * 0.96f),
                             radius = size.width * 0.66f,
-                        ),
-                        center = Offset(size.width * 0.24f, size.height * 0.96f),
-                        radius = size.width * 0.66f,
-                    )
+                        )
+                    }
                 }
             }
             content()
@@ -272,7 +277,7 @@ internal fun CatalogLiquidButton(
             modifier = modifier,
             enabled = enabled,
             shape = shape,
-            elevation = elevation,
+            elevation = null,
             border = border,
             contentPadding = contentPadding,
             interactionSource = interactionSource,
@@ -395,7 +400,7 @@ internal fun CatalogLiquidFilledTonalButton(
             modifier = modifier,
             enabled = enabled,
             shape = shape,
-            elevation = elevation,
+            elevation = null,
             border = border,
             contentPadding = contentPadding,
             interactionSource = interactionSource,
@@ -599,6 +604,110 @@ internal fun CatalogLiquidFilterChip(
             leadingIcon?.invoke()
             label()
             trailingIcon?.invoke()
+        }
+    }
+}
+
+@Composable
+internal fun CatalogLiquidRadioButton(
+    selected: Boolean,
+    onClick: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    val backdrop = LocalHuishengGlassBackdrop.current
+    if (!LocalHuishengGlassEnabled.current ||
+        backdrop == null ||
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.S
+    ) {
+        MaterialRadioButton(
+            selected = selected,
+            onClick = onClick,
+            modifier = modifier,
+            enabled = enabled,
+        )
+        return
+    }
+
+    val interaction = remember { MutableInteractionSource() }
+    val catalogInteraction = rememberCatalogGlassInteraction()
+    val view = LocalView.current
+    val accent = MaterialTheme.colorScheme.primary
+    val outline = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.34f)
+    val clickModifier = if (onClick == null) {
+        Modifier.semantics {
+            role = Role.RadioButton
+            this.selected = selected
+        }
+    } else {
+        Modifier.selectable(
+            selected = selected,
+            enabled = enabled,
+            role = Role.RadioButton,
+            interactionSource = interaction,
+            indication = null,
+        ) {
+            view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+            onClick()
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .size(40.dp)
+            .drawBackdrop(
+                backdrop = backdrop,
+                shape = { RoundedCornerShape(percent = 50) },
+                effects = {
+                    vibrancy()
+                    blur(1.5.dp.toPx())
+                    lens(
+                        refractionHeight = 7.dp.toPx(),
+                        refractionAmount = 14.dp.toPx(),
+                        depthEffect = true,
+                        chromaticAberration = true,
+                    )
+                },
+                highlight = { Highlight.Ambient.copy(alpha = if (enabled) 0.82f else 0.35f) },
+                shadow = {
+                    Shadow(radius = 4.dp, color = Color.Black.copy(alpha = 0.08f))
+                },
+                layerBlock = {
+                    catalogPressTransform(
+                        catalogInteraction,
+                        1f + 3.dp.toPx() / size.height.coerceAtLeast(1f),
+                    )
+                },
+                onDrawSurface = {
+                    drawRect(
+                        MaterialTheme.colorScheme.surface.copy(
+                            alpha = if (enabled) 0.18f else 0.08f,
+                        )
+                    )
+                },
+            )
+            .then(catalogInteraction.clippedModifier(RoundedCornerShape(percent = 50)))
+            .then(catalogInteraction.gestureModifier)
+            .then(clickModifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier
+                .size(20.dp)
+                .clip(RoundedCornerShape(percent = 50))
+                .border(
+                    width = if (selected) 2.dp else 1.dp,
+                    color = if (selected) accent else outline,
+                    shape = RoundedCornerShape(percent = 50),
+                )
+        )
+        if (selected) {
+            Box(
+                Modifier
+                    .size(10.dp)
+                    .clip(RoundedCornerShape(percent = 50))
+                    .background(accent)
+            )
         }
     }
 }
@@ -845,7 +954,7 @@ internal fun CatalogLiquidSwitch(
         )
         Box(
             Modifier
-                .offset(x = 2.dp + 20.dp * fraction)
+                .offset(x = 2.dp + 20.dp * fraction, y = 2.dp)
                 .drawBackdrop(
                     backdrop = combinedBackdrop,
                     shape = { shape },

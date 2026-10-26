@@ -280,7 +280,7 @@ internal fun HuishengLiquidGlassBar(
                         }
                     },
             ) {
-                if (!useNativeGlass) {
+                if (glassEnabled && !useNativeGlass) {
                     Canvas(Modifier.fillMaxSize()) {
                         val highlightCenter = Offset(
                             x = size.width * (selectedIndex + 0.5f) / tabs.size,
@@ -380,18 +380,20 @@ internal fun HuishengLiquidGlassBar(
                         }
                         .then(indicatorSurface),
                 ) {
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .background(
-                                Brush.verticalGradient(
-                                    listOf(
-                                        Color.White.copy(alpha = if (darkTheme) 0.1f else 0.2f),
-                                        Color.Transparent,
+                    if (glassEnabled) {
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.verticalGradient(
+                                        listOf(
+                                            Color.White.copy(alpha = if (darkTheme) 0.1f else 0.2f),
+                                            Color.Transparent,
+                                        )
                                     )
                                 )
-                            )
-                    )
+                        )
+                    }
                 }
 
                 Row(

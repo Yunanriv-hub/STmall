@@ -2,6 +2,7 @@ package com.fktm.app
 
 import android.graphics.Color as AndroidColor
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -34,6 +35,7 @@ class MainActivity : ComponentActivity() {
     private val lockVm: UnlockViewModel by viewModels()
     private val waterVm: WaterViewModel by viewModels()
     private var pendingAutoUnlock = false
+    private var backgroundImageUri by mutableStateOf<String?>(null)
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
@@ -50,9 +52,24 @@ class MainActivity : ComponentActivity() {
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* optional */ }
 
+    private val backgroundImagePicker =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri == null) return@registerForActivityResult
+            runCatching {
+                contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
+            val saved = uri.toString()
+            (application as FktmApp).preferences.backgroundImageUri = saved
+            backgroundImageUri = saved
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val app = application as FktmApp
+        backgroundImageUri = app.preferences.backgroundImageUri
 
         setContent {
             var themeMode by remember { mutableStateOf(app.preferences.themeMode) }
@@ -86,6 +103,22 @@ class MainActivity : ComponentActivity() {
                     onGlassEnabledChange = { enabled ->
                         app.preferences.liquidGlassEnabled = enabled
                         glassEnabled = enabled
+                    },
+                    backgroundImageUri = backgroundImageUri,
+                    onPickBackgroundImage = {
+                        backgroundImagePicker.launch(arrayOf("image/*"))
+                    },
+                    onClearBackgroundImage = {
+                        backgroundImageUri?.let { saved ->
+                            runCatching {
+                                contentResolver.releasePersistableUriPermission(
+                                    Uri.parse(saved),
+                                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                                )
+                            }
+                        }
+                        app.preferences.backgroundImageUri = null
+                        backgroundImageUri = null
                     },
                 )
             }

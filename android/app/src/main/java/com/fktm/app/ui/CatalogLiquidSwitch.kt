@@ -179,7 +179,7 @@ internal fun CatalogLiquidSwitch(
         )
         Box(
             Modifier
-                .offset(x = 2.dp + 20.dp * fraction)
+                .offset(x = 2.dp + 20.dp * fraction, y = 2.dp)
                 .drawBackdrop(
                     backdrop = combinedBackdrop,
                     shape = { shape },

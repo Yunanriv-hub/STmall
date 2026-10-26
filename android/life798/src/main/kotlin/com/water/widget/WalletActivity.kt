@@ -38,7 +38,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import com.water.widget.ui.CatalogLiquidOutlinedButton as OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import com.water.widget.ui.CatalogLiquidTextButton as TextButton
@@ -922,7 +921,7 @@ private fun WalletCard(
                 Text(wallet.name, fontWeight = FontWeight.SemiBold)
                 Text("余额 ¥${wallet.balance.money()}", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            RadioButton(selected = selected, onClick = null, enabled = enabled)
+            CatalogLiquidRadioButton(selected = selected, onClick = null, enabled = enabled)
         }
     }
 }
@@ -954,7 +953,7 @@ private fun ProductCard(
             modifier = Modifier.padding(18.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            RadioButton(selected = selected, onClick = null, enabled = enabled)
+            CatalogLiquidRadioButton(selected = selected, onClick = null, enabled = enabled)
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(product.displayName, fontWeight = FontWeight.SemiBold)
