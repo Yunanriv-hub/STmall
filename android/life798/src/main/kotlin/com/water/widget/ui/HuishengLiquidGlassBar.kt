@@ -444,10 +444,15 @@ private fun androidx.compose.foundation.layout.RowScope.LiquidGlassTabButton(
         },
         label = "huisheng-tab-press",
     )
+    val selectedContentColor = if (LocalHuishengGlassEnabled.current) {
+        accentColor
+    } else {
+        MaterialTheme.colorScheme.onPrimary
+    }
     val contentColor by animateColorAsState(
         targetValue = lerp(
             MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.76f),
-            accentColor,
+            selectedContentColor,
             selectionProgress,
         ),
         label = "huisheng-tab-color",

@@ -38,7 +38,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
@@ -395,6 +397,7 @@ internal fun CatalogLiquidRadioButton(
     val view = LocalView.current
     val accent = MaterialTheme.colorScheme.primary
     val outline = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.34f)
+    val surfaceColor = MaterialTheme.colorScheme.surface
     val clickModifier = if (onClick == null) {
         Modifier.semantics {
             role = Role.RadioButton
@@ -441,7 +444,7 @@ internal fun CatalogLiquidRadioButton(
                 },
                 onDrawSurface = {
                     drawRect(
-                        MaterialTheme.colorScheme.surface.copy(
+                        surfaceColor.copy(
                             alpha = if (enabled) 0.18f else 0.08f,
                         )
                     )

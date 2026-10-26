@@ -634,6 +634,7 @@ internal fun CatalogLiquidRadioButton(
     val view = LocalView.current
     val accent = MaterialTheme.colorScheme.primary
     val outline = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.34f)
+    val surfaceColor = MaterialTheme.colorScheme.surface
     val clickModifier = if (onClick == null) {
         Modifier.semantics {
             role = Role.RadioButton
@@ -680,7 +681,7 @@ internal fun CatalogLiquidRadioButton(
                 },
                 onDrawSurface = {
                     drawRect(
-                        MaterialTheme.colorScheme.surface.copy(
+                        surfaceColor.copy(
                             alpha = if (enabled) 0.18f else 0.08f,
                         )
                     )

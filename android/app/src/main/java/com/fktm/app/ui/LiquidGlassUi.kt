@@ -643,9 +643,15 @@ private fun GlassTab(
         animationSpec = spring(stiffness = 700f, dampingRatio = 0.62f),
         label = "glass-tab-press",
     )
+    val glassEnabled = LocalLiquidGlassEnabled.current
+    val selectedContentColor = if (glassEnabled) {
+        accentColor
+    } else {
+        MaterialTheme.colorScheme.onPrimary
+    }
     val color = lerp(
         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
-        accentColor,
+        selectedContentColor,
         selectionProgress,
     )
     val selectedScale = 0.96f + selectionProgress * 0.04f
