@@ -1,10 +1,10 @@
 {
   "channel": "stable",
-  "versionName": "0.6.1",
-  "versionCode": 26,
+  "versionName": "0.6.2",
+  "versionCode": 27,
   "isReady": false,
   "minVersionCode": 1,
-  "releaseNotes": "Cumpus 0.6.1：软件名称更新为 Cumpus，启用新 C 形图标，并保留完美校园水电只读查询。项目继续只通过本地 APK 分发。",
+  "releaseNotes": "Cumpus 0.6.2：恢复慧生活“添加设备”入口，并新增可直接进入饮水控制页的“设备与饮水”入口。项目继续只通过本地 APK 分发。",
   "releaseUrl": "",
   "assets": []
 }

@@ -145,6 +145,7 @@ import com.kyant.backdrop.effects.vibrancy
 import com.kyant.backdrop.highlight.Highlight
 import com.kyant.backdrop.shadow.Shadow
 import com.water.widget.ConfigActivity
+import com.water.widget.DeviceAddActivity
 import com.water.widget.AccountStore
 import com.water.widget.AccountsActivity
 import com.water.widget.AppThemeMode as HuishengThemeMode
@@ -2426,6 +2427,12 @@ private fun IlifeProfileScreen(
             onAccounts = { context.startActivity(Intent(context, AccountsActivity::class.java)) },
             onScores = { context.startActivity(Intent(context, ScoreActivity::class.java)) },
             onWallet = { context.startActivity(Intent(context, WalletActivity::class.java)) },
+            onDevices = {
+                context.startActivity(Intent(context, ConfigActivity::class.java))
+            },
+            onAddDevice = {
+                context.startActivity(Intent(context, DeviceAddActivity::class.java))
+            },
             themeMode = libraryTheme,
             onOpenAppearance = onOpenAppearance,
             modifier = Modifier.weight(1f),

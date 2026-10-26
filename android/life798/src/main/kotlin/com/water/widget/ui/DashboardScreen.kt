@@ -314,6 +314,12 @@ fun DashboardScreen(
                             onAccounts = onAccounts,
                             onScores = onScores,
                             onWallet = onWallet,
+                            onDevices = {
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(0)
+                                }
+                            },
+                            onAddDevice = onAddDevice,
                             themeMode = themeMode,
                             onOpenAppearanceSettings = { showAppearanceSettings = true },
                             onOpenSupport = { showSupportDialog = true },
@@ -874,6 +880,8 @@ private fun MineTab(
     onAccounts: () -> Unit,
     onScores: () -> Unit,
     onWallet: () -> Unit,
+    onDevices: () -> Unit,
+    onAddDevice: () -> Unit,
     themeMode: AppThemeMode,
     onOpenAppearanceSettings: () -> Unit,
     onOpenSupport: () -> Unit,
@@ -895,6 +903,21 @@ private fun MineTab(
         }
     }
     if (state.hasAccount) PersonalUsageSummary(usage = state.usage)
+    SettingsGroup("设备与饮水") {
+        SettingsRow(
+            Icons.Default.WaterDrop,
+            "设备与饮水",
+            "查看并控制已收藏饮水机",
+            onDevices
+        )
+        HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
+        SettingsRow(
+            Icons.Default.Add,
+            "添加设备",
+            "扫码、NFC 碰一碰或手动输入",
+            onAddDevice
+        )
+    }
     SettingsGroup("账户与资金") {
         SettingsRow(Icons.Default.CheckCircle, "积分与消费记录", "查看积分收支和接水花费", onScores)
         HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
@@ -938,6 +961,8 @@ fun HuishengMineContent(
     onAccounts: () -> Unit,
     onScores: () -> Unit,
     onWallet: () -> Unit,
+    onDevices: () -> Unit,
+    onAddDevice: () -> Unit,
     themeMode: AppThemeMode,
     onOpenAppearance: () -> Unit,
     modifier: Modifier = Modifier,
@@ -961,6 +986,8 @@ fun HuishengMineContent(
                 onAccounts = onAccounts,
                 onScores = onScores,
                 onWallet = onWallet,
+                onDevices = onDevices,
+                onAddDevice = onAddDevice,
                 themeMode = themeMode,
                 onOpenAppearanceSettings = onOpenAppearance,
                 onOpenSupport = {},
