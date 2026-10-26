@@ -46,6 +46,10 @@ STmall 将天猫校园的智能宿舍、蓝牙门锁、校园饮水，以及慧�
 - 支持抓取自己门锁的凭证、Keystore 加密保存、离线蓝牙开门和电量查询。
 - 支持慧生活798多账户、独立用水/积分登录、设备启停和收藏设备同步。
 - 支持慧生活钱包余额、充值、积分签到、任务执行与消费账单。
+- 支持 U净手机号登录、扫码收藏多台洗衣机、空闲状态、订单倒计时、
+  Nordic/Cypress 蓝牙启动、机身时间同步与支付宝订单支付。
+- 主界面分为“主页 / 功能 / 我的”三页；主页只保留一键开门和一键接水，
+  其余校园服务集中放在横向功能卡片中。
 - STmall“我的”使用“天猫校园 / 慧生活”双入口，分别进入两套账户与服务。
 - 首页、 “我的”和模块子页统一使用液态玻璃组件与弹簧按压反馈。
 - Android 12 及以上使用真实背景模糊，Android 13 及以上启用透镜折射；
@@ -169,15 +173,15 @@ android/app/build/outputs/apk/release/app-release.apk
 
 | 项目 | 值 |
 |---|---|
-| 版本 | `0.3.5` |
-| versionCode | `20` |
+| 版本 | `0.4.0` |
+| versionCode | `21` |
 | 包名 | `com.rea.campuslite` |
 | minSdk | `26` |
 | targetSdk | `36` |
-| Release APK | `STmall_0.3.5.apk` |
-| SHA-256 | `FF1F97E1757018CA7A053D67837201076C81CC6D71A2062B70543388D8478463` |
+| Release APK | `STmall_0.4.0.apk` |
+| SHA-256 | `231CB672E59DCD62024D6897AF12AE160F6D0FA5F00DA5A28F58C3415FCC0B16` |
 
-该版本已通过 267 项 JVM 单元测试、release 编译、Android Lint 关键检查和
+该版本已通过 271 项 JVM 单元测试、release 编译、Android Lint 关键检查和
 v2 签名校验。
 
 ## 兼容性说明
@@ -245,6 +249,9 @@ v2 签名校验。
   [LICENSE-AndroidLiquidGlass](LICENSE-AndroidLiquidGlass)。
 - life-798 参考项目采用 MIT License，许可文本见
   [LICENSE-life798](LICENSE-life798)。
+- U净网络与蓝牙协议参考 `baijuqi/ujing-mini`，采用 MIT License，
+  许可文本见 [LICENSE-ujing-mini](LICENSE-ujing-mini)。STmall 未复制
+  `DUT-Ujing` 的签名密钥、Web 服务或项目代码。
 - 第三方项目名称、商标和图标权利归各自权利人所有。
 - STmall 自有代码按照 [LICENSE](LICENSE) 作为专有、闭源软件保留全部权利；
   未经项目作者明确书面授权，不得复制、修改、再分发或商用。

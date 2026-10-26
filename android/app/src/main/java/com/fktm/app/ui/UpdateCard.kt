@@ -50,115 +50,25 @@ import kotlinx.coroutines.launch
  */
 @Composable
 fun UpdateCard(repo: AppUpdateRepository, settings: UpdateSettings) {
-    val scope = rememberCoroutineScope()
-
-    var checking by remember { mutableStateOf(false) }
-    var result by remember { mutableStateOf<UpdateCheckResult?>(null) }
-    var showSettings by remember { mutableStateOf(false) }
-
-    val downloadState by repo.downloadState.collectAsStateWithLifecycle()
-
-    fun runCheck(force: Boolean) {
-        if (checking) return
-        checking = true
-        scope.launch {
-            try {
-                result = repo.checkForUpdate(force = force)
-            } finally {
-                checking = false
-            }
-        }
-    }
-
-    // 启动自动检查：走节流阈值，静默进行
-    LaunchedEffect(Unit) {
-        if (settings.shouldCheckOnLaunch()) runCheck(force = false)
-    }
-
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = RoundedCornerShape(14.dp),
+    LiquidGlassPanel(
         modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
     ) {
-        Column(Modifier.padding(14.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("检查更新", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    "v${repo.currentVersionName} (${repo.currentVersionCode})",
-                    fontSize = 12.sp,
-                    fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                )
-                Spacer(Modifier.weight(1f))
-                OutlinedButton(onClick = { showSettings = !showSettings }) {
-                    Text(if (showSettings) "收起" else "设置", fontSize = 12.sp)
-                }
-                Spacer(Modifier.width(8.dp))
-                Button(onClick = { runCheck(force = true) }, enabled = !checking) {
-                    if (checking) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(14.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                        )
-                        Spacer(Modifier.width(6.dp))
-                    }
-                    Text(if (checking) "检查中" else "检查更新", fontSize = 12.sp)
-                }
-            }
-
-            val release = (result as? UpdateCheckResult.UpdateAvailable)?.release
-                ?: (result as? UpdateCheckResult.Ignored)?.release
-
-            if (!checking) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = statusText(result),
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                )
-            }
-
-            if (result is UpdateCheckResult.Failed && !checking) {
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    (result as UpdateCheckResult.Failed).message,
-                    fontSize = 10.sp,
-                    fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.error.copy(alpha = 0.85f),
-                )
-            }
-
-            if (release != null) {
-                Spacer(Modifier.height(10.dp))
-                HorizontalDivider()
-                Spacer(Modifier.height(10.dp))
-                ReleaseSection(
-                    release = release,
-                    isIgnored = result is UpdateCheckResult.Ignored,
-                    downloadState = downloadState,
-                    onDownload = { scope.launch { repo.downloadAndInstall(release) } },
-                    onCancel = { repo.cancelDownload() },
-                    onIgnore = {
-                        repo.ignoreRelease(release)
-                        result = UpdateCheckResult.Ignored(release)
-                    },
-                    onOpenPage = { repo.openReleasePage(release) },
-                )
-            } else {
-                DownloadStatusOnly(downloadState)
-            }
-
-            if (showSettings) {
-                Spacer(Modifier.height(10.dp))
-                HorizontalDivider()
-                Spacer(Modifier.height(10.dp))
-                SettingsSection(settings = settings, onChanged = { showSettings = false })
-            }
+        Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Text("在线更新已暂停", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text(
+                "STmall 已暂时闭源并停止 GitHub 更新，本机不会自动检查或下载新版本。",
+                fontSize = 12.sp,
+                lineHeight = 18.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                "当前版本 v${repo.currentVersionName} (${repo.currentVersionCode})",
+                fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

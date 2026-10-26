@@ -9,7 +9,8 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
@@ -51,6 +52,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -123,10 +126,10 @@ internal fun HuishengLiquidGlassBar(
         accentFraction,
     )
     val dragDistance = (animatedPosition - selectedIndex).coerceIn(-1f, 1f)
-    val barTranslationPx = with(density) { (3.dp * dragDistance).toPx() }
+    val barTranslationPx = with(density) { (1.5.dp * dragDistance).toPx() }
     val barStretch = abs(dragDistance)
     val lensStretch by animateFloatAsState(
-        targetValue = if (isDragging) 0.035f else 0f,
+        targetValue = if (isDragging) abs(dragDistance) * 0.022f else 0f,
         animationSpec = if (animationsEnabled) {
             spring(stiffness = 620f, dampingRatio = 0.68f)
         } else {
@@ -239,32 +242,42 @@ internal fun HuishengLiquidGlassBar(
                     }
                     .pointerInput(selectedIndex, tabs.size) {
                         val tabWidthPx = (size.width.toFloat() / tabs.size).coerceAtLeast(1f)
-                        detectHorizontalDragGestures(
-                            onDragStart = {
-                                isDragging = true
-                                suppressClicksUntil = Long.MAX_VALUE
-                            },
-                            onHorizontalDrag = { change, dragAmount ->
-                                change.consume()
-                                dragPosition = (
-                                    dragPosition + dragAmount / tabWidthPx
-                                ).coerceIn(0f, tabs.lastIndex.toFloat())
-                            },
-                            onDragCancel = {
-                                dragPosition = selectedIndex.toFloat()
-                                isDragging = false
-                                suppressClicksUntil = System.currentTimeMillis() + 250L
-                            },
-                            onDragEnd = {
-                                val target = dragPosition
-                                    .roundToInt()
-                                    .coerceIn(0, tabs.lastIndex)
+                        val touchSlop = viewConfiguration.touchSlop
+                        awaitEachGesture {
+                            val down = awaitFirstDown(
+                                requireUnconsumed = false,
+                                pass = PointerEventPass.Initial,
+                            )
+                            var lastX = down.position.x
+                            var totalDx = 0f
+                            var draggingNow = false
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                val dx = change.position.x - lastX
+                                lastX = change.position.x
+                                totalDx += dx
+                                if (!draggingNow && abs(totalDx) > touchSlop) {
+                                    draggingNow = true
+                                    isDragging = true
+                                    suppressClicksUntil = Long.MAX_VALUE
+                                }
+                                if (draggingNow) {
+                                    change.consume()
+                                    dragPosition = (
+                                        dragPosition + dx * 0.82f / tabWidthPx
+                                    ).coerceIn(0f, tabs.lastIndex.toFloat())
+                                }
+                                if (change.changedToUpIgnoreConsumed()) break
+                            }
+                            if (draggingNow) {
+                                val target = dragPosition.roundToInt().coerceIn(0, tabs.lastIndex)
                                 dragPosition = target.toFloat()
                                 isDragging = false
                                 suppressClicksUntil = System.currentTimeMillis() + 250L
                                 if (target != selectedIndex) onSelected(target)
-                            },
-                        )
+                            }
+                        }
                     },
             ) {
                 if (!useNativeGlass) {

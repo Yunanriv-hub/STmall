@@ -9,6 +9,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -17,6 +18,7 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.GraphicsLayerScope
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.CoroutineScope
@@ -72,6 +74,9 @@ internal class CatalogGlassInteraction(
         drawContent()
     }
 
+    fun clippedModifier(shape: Shape): Modifier =
+        Modifier.clip(shape).then(modifier)
+
     val gestureModifier: Modifier = Modifier.pointerInput(scope) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
@@ -108,8 +113,8 @@ internal fun GraphicsLayerScope.catalogPressTransform(
     val scale = 1f + (pressedScale - 1f) * progress
     val maxOffset = size.minDimension
     val offset = interaction.pointerOffset
-    translationX = maxOffset * tanh(0.05f * offset.x / maxOffset)
-    translationY = maxOffset * tanh(0.05f * offset.y / maxOffset)
+    translationX = maxOffset * tanh(0.028f * offset.x / maxOffset)
+    translationY = maxOffset * tanh(0.028f * offset.y / maxOffset)
     val angle = atan2(offset.y, offset.x)
     val dragScale = abs(pressedScale - 1f)
     scaleX = scale +

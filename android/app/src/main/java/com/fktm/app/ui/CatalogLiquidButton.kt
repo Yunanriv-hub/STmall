@@ -238,7 +238,7 @@ internal fun CatalogLiquidIconButton(
                     drawRect(Color.White.copy(alpha = if (enabled) 0.075f else 0.025f))
                 },
             )
-            .then(catalogInteraction.modifier)
+            .then(catalogInteraction.clippedModifier(RoundedCornerShape(percent = 50)))
             .then(catalogInteraction.gestureModifier)
             .clickable(
                 enabled = enabled,
@@ -339,7 +339,7 @@ internal fun CatalogLiquidFilterChip(
                     )
                 },
             )
-            .then(catalogInteraction.modifier)
+            .then(catalogInteraction.clippedModifier(RoundedCornerShape(percent = 50)))
             .then(catalogInteraction.gestureModifier)
             .selectable(
                 selected = selected,
@@ -451,7 +451,7 @@ private fun CatalogGlassButtonSurface(
                     }
                 },
             )
-            .then(catalogInteraction.modifier)
+            .then(catalogInteraction.clippedModifier(glassShape))
             .then(catalogInteraction.gestureModifier)
             .clickable(
                 enabled = enabled,

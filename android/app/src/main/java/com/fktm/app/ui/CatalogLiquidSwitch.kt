@@ -2,6 +2,7 @@ package com.fktm.app.ui
 
 import android.os.Build
 import android.view.HapticFeedbackConstants
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
@@ -11,6 +12,7 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Switch
@@ -21,12 +23,12 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.scale
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
@@ -44,6 +46,8 @@ import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.highlight.Highlight
 import com.kyant.backdrop.shadow.InnerShadow
 import com.kyant.backdrop.shadow.Shadow
+import kotlinx.coroutines.launch
+import kotlin.math.max
 import kotlin.math.roundToInt
 
 @Composable
@@ -64,6 +68,8 @@ internal fun CatalogLiquidSwitch(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val view = LocalView.current
+    val scope = rememberCoroutineScope()
+    val tapPulse = remember { Animatable(0f) }
     var targetFraction by remember { mutableFloatStateOf(if (checked) 1f else 0f) }
     var dragging by remember { mutableStateOf(false) }
     var suppressClicksUntil by remember { mutableLongStateOf(0L) }
@@ -79,11 +85,12 @@ internal fun CatalogLiquidSwitch(
         },
         label = "catalog-switch-fraction",
     )
-    val pressProgress by animateFloatAsState(
+    val heldProgress by animateFloatAsState(
         targetValue = if (dragging || pressed) 1f else 0f,
-        animationSpec = spring(dampingRatio = 0.62f, stiffness = 450f),
+        animationSpec = spring(dampingRatio = 0.64f, stiffness = 620f),
         label = "catalog-switch-press-progress",
     )
+    val pressProgress = max(heldProgress, tapPulse.value)
     val pressScale by animateFloatAsState(
         targetValue = 1f + pressProgress * 0.5f,
         animationSpec = spring(dampingRatio = 0.62f, stiffness = 450f),
@@ -118,6 +125,13 @@ internal fun CatalogLiquidSwitch(
                 if (System.currentTimeMillis() >= suppressClicksUntil) {
                     view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
                     onCheckedChange(!checked)
+                    scope.launch {
+                        tapPulse.snapTo(1f)
+                        tapPulse.animateTo(
+                            targetValue = 0f,
+                            animationSpec = spring(dampingRatio = 0.58f, stiffness = 250f),
+                        )
+                    }
                 }
             }
             .pointerInput(checked) {
@@ -165,9 +179,7 @@ internal fun CatalogLiquidSwitch(
         )
         Box(
             Modifier
-                .graphicsLayer {
-                    translationX = 2.dp.toPx() + 20.dp.toPx() * fraction
-                }
+                .offset(x = 2.dp + 20.dp * fraction)
                 .drawBackdrop(
                     backdrop = combinedBackdrop,
                     shape = { shape },

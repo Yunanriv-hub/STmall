@@ -35,6 +35,18 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_NFC_AUTO_START_WATER, false)
         set(value) = prefs.edit().putBoolean(KEY_NFC_AUTO_START_WATER, value).apply()
 
+    var ujingAutoRefresh: Boolean
+        get() = prefs.getBoolean(KEY_UJING_AUTO_REFRESH, false)
+        set(value) = prefs.edit().putBoolean(KEY_UJING_AUTO_REFRESH, value).apply()
+
+    var ujingFreeOnly: Boolean
+        get() = prefs.getBoolean(KEY_UJING_FREE_ONLY, false)
+        set(value) = prefs.edit().putBoolean(KEY_UJING_FREE_ONLY, value).apply()
+
+    var ujingSortMode: String
+        get() = prefs.getString(KEY_UJING_SORT_MODE, "added").orEmpty()
+        set(value) = prefs.edit().putString(KEY_UJING_SORT_MODE, value).apply()
+
     fun enabledHomeModules(): Set<String> {
         val saved = prefs.getStringSet(KEY_ENABLED_HOME_MODULES, null)
         if (saved == null) {
@@ -47,25 +59,32 @@ class AppPreferences(context: Context) {
         } else {
             sanitized + MODULE_QUICK_WATER
         }
-        if (sanitized != saved || withQuickWater != saved) {
+        val withUjing = if (prefs.getBoolean(KEY_ADDED_UJING, false)) {
+            withQuickWater
+        } else {
+            withQuickWater + MODULE_UJING
+        }
+        if (sanitized != saved || withUjing != saved) {
             prefs.edit()
-                .putStringSet(KEY_ENABLED_HOME_MODULES, withQuickWater)
+                .putStringSet(KEY_ENABLED_HOME_MODULES, withUjing)
                 .putBoolean(KEY_ADDED_ILIFE_NFC, true)
                 .putBoolean(KEY_ADDED_QUICK_WATER, true)
+                .putBoolean(KEY_ADDED_UJING, true)
                 .apply()
-            return withQuickWater
+            return withUjing
         }
         if (prefs.getBoolean(KEY_ADDED_ILIFE_NFC, false)) return sanitized
 
         // Existing installations keep their choices while gaining the two new modules once.
-        val migrated = sanitized.toMutableSet().apply {
+        val withIlife = sanitized.toMutableSet().apply {
             add(MODULE_ILIFE)
         }.toSet()
         prefs.edit()
-            .putStringSet(KEY_ENABLED_HOME_MODULES, migrated)
+            .putStringSet(KEY_ENABLED_HOME_MODULES, withIlife)
             .putBoolean(KEY_ADDED_ILIFE_NFC, true)
+            .putBoolean(KEY_ADDED_UJING, true)
             .apply()
-        return migrated
+        return withIlife
     }
 
     fun setHomeModuleEnabled(key: String, enabled: Boolean) {
@@ -75,6 +94,7 @@ class AppPreferences(context: Context) {
             .putStringSet(KEY_ENABLED_HOME_MODULES, next)
             .putBoolean(KEY_ADDED_ILIFE_NFC, true)
             .putBoolean(KEY_ADDED_QUICK_WATER, true)
+            .putBoolean(KEY_ADDED_UJING, true)
             .apply()
     }
 
@@ -83,6 +103,7 @@ class AppPreferences(context: Context) {
             .putStringSet(KEY_ENABLED_HOME_MODULES, keys.toSet())
             .putBoolean(KEY_ADDED_ILIFE_NFC, true)
             .putBoolean(KEY_ADDED_QUICK_WATER, true)
+            .putBoolean(KEY_ADDED_UJING, true)
             .apply()
     }
 
@@ -91,6 +112,7 @@ class AppPreferences(context: Context) {
             .putStringSet(KEY_ENABLED_HOME_MODULES, DEFAULT_HOME_MODULES)
             .putBoolean(KEY_ADDED_ILIFE_NFC, true)
             .putBoolean(KEY_ADDED_QUICK_WATER, true)
+            .putBoolean(KEY_ADDED_UJING, true)
             .apply()
     }
 
@@ -99,6 +121,7 @@ class AppPreferences(context: Context) {
         const val MODULE_QUICK_UNLOCK = "quick_unlock"
         const val MODULE_ILIFE = "ilife"
         const val MODULE_QUICK_WATER = "quick_water"
+        const val MODULE_UJING = "ujing"
 
         private const val LEGACY_MODULE_SCANNER = "scanner"
         private const val LEGACY_MODULE_NFC = "nfc"
@@ -109,6 +132,7 @@ class AppPreferences(context: Context) {
             MODULE_QUICK_UNLOCK,
             MODULE_ILIFE,
             MODULE_QUICK_WATER,
+            MODULE_UJING,
         )
 
         private const val PREFS = "campus_lite_appearance"
@@ -117,5 +141,9 @@ class AppPreferences(context: Context) {
         private const val KEY_ADDED_ILIFE_NFC = "added_ilife_nfc"
         private const val KEY_NFC_AUTO_START_WATER = "nfc_auto_start_water"
         private const val KEY_ADDED_QUICK_WATER = "added_quick_water"
+        private const val KEY_ADDED_UJING = "added_ujing"
+        private const val KEY_UJING_AUTO_REFRESH = "ujing_auto_refresh"
+        private const val KEY_UJING_FREE_ONLY = "ujing_free_only"
+        private const val KEY_UJING_SORT_MODE = "ujing_sort_mode"
     }
 }

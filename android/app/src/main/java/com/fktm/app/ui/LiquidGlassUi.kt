@@ -12,7 +12,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -64,6 +65,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
@@ -253,7 +255,7 @@ private fun GlassIconButton(
             ) {
                 onClick(center)
             }
-            .then(catalogInteraction.modifier)
+            .then(catalogInteraction.clippedModifier(CircleShape))
             .then(catalogInteraction.gestureModifier),
         contentAlignment = Alignment.Center,
     ) {
@@ -284,6 +286,7 @@ internal fun LiquidGlassBottomBar(
     val shape = RoundedCornerShape(percent = 50)
     val surface = MaterialTheme.colorScheme.surface
     val accent = MaterialTheme.colorScheme.primary
+    val featureAccent = if (darkTheme) Color(0xFFC2A7FF) else Color(0xFF6E4AB0)
     val profileAccent = if (darkTheme) Color(0xFF8AB4F8) else Color(0xFF356EA8)
     val density = LocalDensity.current
     val animationsEnabled = ValueAnimator.areAnimatorsEnabled()
@@ -308,12 +311,25 @@ internal fun LiquidGlassBottomBar(
         },
         label = "glass-tab-drag-position",
     )
-    val activeAccent = lerp(accent, profileAccent, animatedPosition.coerceIn(0f, 1f))
-    val dragDistance = (animatedPosition - selectedIndex).coerceIn(-1f, 1f)
-    val barTranslationPx = with(density) { (3.dp * dragDistance).toPx() }
-    val barStretch = abs(dragDistance)
+    val lowerAccentIndex = animatedPosition.toInt().coerceIn(0, 1)
+    val accentFraction = (animatedPosition - lowerAccentIndex).coerceIn(0f, 1f)
+    val accentAt: (Int) -> Color = { index ->
+        when (index) {
+            0 -> accent
+            1 -> featureAccent
+            else -> profileAccent
+        }
+    }
+    val activeAccent = lerp(
+        accentAt(lowerAccentIndex),
+        accentAt((lowerAccentIndex + 1).coerceAtMost(2)),
+        accentFraction,
+    )
+    val dragDistance = (animatedPosition - selectedIndex).coerceIn(-2f, 2f)
+    val barTranslationPx = with(density) { (1.5.dp * dragDistance).toPx() }
+    val barStretch = abs(dragDistance) / 2f
     val lensStretch by animateFloatAsState(
-        targetValue = if (isDragging) 0.035f else 0f,
+        targetValue = if (isDragging) abs((animatedPosition - selectedIndex).coerceIn(-1f, 1f)) * 0.022f else 0f,
         animationSpec = if (animationsEnabled) {
             spring(stiffness = 620f, dampingRatio = 0.68f)
         } else {
@@ -425,36 +441,48 @@ internal fun LiquidGlassBottomBar(
                         scaleY = 1f - barStretch * 0.004f
                     }
                     .pointerInput(selectedIndex) {
-                        val tabWidthPx = (size.width / 2f).coerceAtLeast(1f)
-                        detectHorizontalDragGestures(
-                            onDragStart = {
-                                isDragging = true
-                                suppressClicksUntil = Long.MAX_VALUE
-                            },
-                            onHorizontalDrag = { change, dragAmount ->
-                                change.consume()
-                                dragPosition = (
-                                    dragPosition + dragAmount / tabWidthPx
-                                ).coerceIn(0f, 1f)
-                            },
-                            onDragCancel = {
-                                dragPosition = selectedIndex.toFloat()
-                                isDragging = false
-                                suppressClicksUntil = System.currentTimeMillis() + 250L
-                            },
-                            onDragEnd = {
-                                val target = if (dragPosition >= 0.5f) 1 else 0
+                        val tabWidthPx = (size.width / 3f).coerceAtLeast(1f)
+                        val touchSlop = viewConfiguration.touchSlop
+                        awaitEachGesture {
+                            val down = awaitFirstDown(
+                                requireUnconsumed = false,
+                                pass = PointerEventPass.Initial,
+                            )
+                            var lastX = down.position.x
+                            var totalDx = 0f
+                            var draggingNow = false
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                val dx = change.position.x - lastX
+                                lastX = change.position.x
+                                totalDx += dx
+                                if (!draggingNow && abs(totalDx) > touchSlop) {
+                                    draggingNow = true
+                                    isDragging = true
+                                    suppressClicksUntil = Long.MAX_VALUE
+                                }
+                                if (draggingNow) {
+                                    change.consume()
+                                    dragPosition = (
+                                        dragPosition + dx * 0.82f / tabWidthPx
+                                    ).coerceIn(0f, 2f)
+                                }
+                                if (change.changedToUpIgnoreConsumed()) break
+                            }
+                            if (draggingNow) {
+                                val target = dragPosition.roundToInt().coerceIn(0, 2)
                                 dragPosition = target.toFloat()
                                 isDragging = false
                                 suppressClicksUntil = System.currentTimeMillis() + 250L
                                 if (target != selectedIndex) onSelected(target)
-                            },
-                        )
+                            }
+                        }
                     }
-                    .then(barInteraction.modifier)
+                    .then(barInteraction.clippedModifier(shape))
                     .then(barInteraction.gestureModifier),
             ) {
-                val tabWidth = maxWidth / 2
+                val tabWidth = maxWidth / 3
                 val indicatorOffset = with(density) {
                     (tabWidth * animatedPosition + 6.dp).roundToPx()
                 }
@@ -468,7 +496,7 @@ internal fun LiquidGlassBottomBar(
                 if (glassEnabled) {
                     Canvas(Modifier.matchParentSize()) {
                         val glowCenter = Offset(
-                            x = size.width * (animatedPosition + 0.5f) / 2f,
+                            x = size.width * (animatedPosition + 0.5f) / 3f,
                             y = size.height * 0.5f,
                         )
                         drawCircle(
@@ -559,11 +587,25 @@ internal fun LiquidGlassBottomBar(
                         modifier = Modifier.weight(1f),
                         selected = selectedIndex == 1,
                         selectionProgress = (1f - abs(animatedPosition - 1f)).coerceIn(0f, 1f),
+                        accentColor = featureAccent,
+                        label = "功能",
+                        onClick = {
+                            if (System.currentTimeMillis() >= suppressClicksUntil) {
+                                onSelected(1)
+                            }
+                        },
+                    ) {
+                        FeatureGlyph(it)
+                    }
+                    GlassTab(
+                        modifier = Modifier.weight(1f),
+                        selected = selectedIndex == 2,
+                        selectionProgress = (1f - abs(animatedPosition - 2f)).coerceIn(0f, 1f),
                         accentColor = profileAccent,
                         label = "我的",
                         onClick = {
                             if (System.currentTimeMillis() >= suppressClicksUntil) {
-                                onSelected(1)
+                                onSelected(2)
                             }
                         },
                     ) {
@@ -648,6 +690,29 @@ private fun HomeGlyph(color: Color) {
             lineTo(size.width * 0.78f, size.height * 0.43f)
         }
         drawPath(path, color, style = stroke)
+    }
+}
+
+@Composable
+private fun FeatureGlyph(color: Color) {
+    Canvas(Modifier.fillMaxSize()) {
+        val stroke = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round)
+        val gap = size.minDimension * 0.16f
+        val cell = (size.minDimension - gap) / 2f
+        listOf(
+            Offset(0f, 0f),
+            Offset(cell + gap, 0f),
+            Offset(0f, cell + gap),
+            Offset(cell + gap, cell + gap),
+        ).forEach { offset ->
+            drawRoundRect(
+                color = color,
+                topLeft = offset,
+                size = Size(cell, cell),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(cell * 0.28f),
+                style = stroke,
+            )
+        }
     }
 }
 

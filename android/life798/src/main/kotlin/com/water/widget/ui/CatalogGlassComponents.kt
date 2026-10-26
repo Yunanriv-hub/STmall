@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
@@ -89,6 +90,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.tanh
@@ -198,6 +200,9 @@ private class CatalogGlassInteraction(
         drawContent()
     }
 
+    fun clippedModifier(shape: Shape): Modifier =
+        Modifier.clip(shape).then(modifier)
+
     val gestureModifier: Modifier = Modifier.pointerInput(scope) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
@@ -234,8 +239,8 @@ private fun GraphicsLayerScope.catalogPressTransform(
     val scale = 1f + (pressedScale - 1f) * progress
     val maxOffset = size.minDimension
     val offset = interaction.pointerOffset
-    translationX = maxOffset * tanh(0.05f * offset.x / maxOffset)
-    translationY = maxOffset * tanh(0.05f * offset.y / maxOffset)
+    translationX = maxOffset * tanh(0.028f * offset.x / maxOffset)
+    translationY = maxOffset * tanh(0.028f * offset.y / maxOffset)
     val angle = atan2(offset.y, offset.x)
     val dragScale = abs(pressedScale - 1f)
     scaleX = scale +
@@ -468,7 +473,7 @@ internal fun CatalogLiquidIconButton(
                     drawRect(Color.White.copy(alpha = if (enabled) 0.075f else 0.025f))
                 },
             )
-            .then(catalogInteraction.modifier)
+            .then(catalogInteraction.clippedModifier(RoundedCornerShape(percent = 50)))
             .then(catalogInteraction.gestureModifier)
             .clickable(
                 enabled = enabled,
@@ -571,7 +576,7 @@ internal fun CatalogLiquidFilterChip(
                     )
                 },
             )
-            .then(catalogInteraction.modifier)
+            .then(catalogInteraction.clippedModifier(shape))
             .then(catalogInteraction.gestureModifier)
             .selectable(
                 selected = selected,
@@ -686,7 +691,7 @@ private fun CatalogGlassButtonSurface(
                     }
                 },
             )
-            .then(catalogInteraction.modifier)
+            .then(catalogInteraction.clippedModifier(glassShape))
             .then(catalogInteraction.gestureModifier)
             .clickable(
                 enabled = enabled,
@@ -733,6 +738,8 @@ internal fun CatalogLiquidSwitch(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val view = LocalView.current
+    val scope = rememberCoroutineScope()
+    val tapPulse = remember { Animatable(0f) }
     var targetFraction by remember { mutableFloatStateOf(if (checked) 1f else 0f) }
     var dragging by remember { mutableStateOf(false) }
     var suppressClicksUntil by remember { mutableLongStateOf(0L) }
@@ -744,11 +751,12 @@ internal fun CatalogLiquidSwitch(
         animationSpec = if (dragging) snap() else spring(0.74f, 560f),
         label = "catalog-switch-fraction",
     )
-    val pressProgress by animateFloatAsState(
+    val heldProgress by animateFloatAsState(
         targetValue = if (dragging || pressed) 1f else 0f,
-        animationSpec = spring(0.62f, 450f),
+        animationSpec = spring(0.64f, 620f),
         label = "catalog-switch-press-progress",
     )
+    val pressProgress = max(heldProgress, tapPulse.value)
     val pressScale by animateFloatAsState(
         targetValue = 1f + pressProgress * 0.5f,
         animationSpec = spring(0.62f, 450f),
@@ -783,6 +791,13 @@ internal fun CatalogLiquidSwitch(
                 if (System.currentTimeMillis() >= suppressClicksUntil) {
                     view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
                     onCheckedChange(!checked)
+                    scope.launch {
+                        tapPulse.snapTo(1f)
+                        tapPulse.animateTo(
+                            targetValue = 0f,
+                            animationSpec = spring(0.58f, 250f),
+                        )
+                    }
                 }
             }
             .pointerInput(checked) {
@@ -830,9 +845,7 @@ internal fun CatalogLiquidSwitch(
         )
         Box(
             Modifier
-                .graphicsLayer {
-                    translationX = 2.dp.toPx() + 20.dp.toPx() * fraction
-                }
+                .offset(x = 2.dp + 20.dp * fraction)
                 .drawBackdrop(
                     backdrop = combinedBackdrop,
                     shape = { shape },

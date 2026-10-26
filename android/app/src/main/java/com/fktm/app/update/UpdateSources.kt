@@ -34,18 +34,11 @@ object UpdateSources {
         "ghproxy.mirror.skybyte.me",
     )
 
-    /** 有序更新源：6 个加速镜像 + GitHub 直连兜底。顺序即尝试顺序。 */
-    val all: List<UpdateSource> = MIRROR_HOSTS.map { host ->
-        UpdateSource(
-            name = host,
-            manifestUrl = "https://$host/$MANIFEST_URL",
-            timeoutMillis = PROXY_TIMEOUT_MILLIS,
-        )
-    } + UpdateSource(
-        name = "GitHub",
-        manifestUrl = MANIFEST_URL,
-        timeoutMillis = GITHUB_TIMEOUT_MILLIS,
-    )
+    /**
+     * STmall 已暂时闭源并停止 GitHub 更新，因此不再访问任何在线更新源。
+     * 保留其余常量用于未来明确恢复更新功能时重新启用。
+     */
+    val all: List<UpdateSource> = emptyList()
 
     /**
      * APK 下载用的加速代理前缀。

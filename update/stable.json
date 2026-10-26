@@ -1,18 +1,10 @@
 {
   "channel": "stable",
-  "versionName": "0.3.5",
-  "versionCode": 20,
-  "isReady": true,
+  "versionName": "0.4.0",
+  "versionCode": 21,
+  "isReady": false,
   "minVersionCode": 1,
-  "releaseNotes": "扫码/NFC迁移、默认设备选择、隐私隐藏、玻璃开关与稳定性更新。",
-  "releaseUrl": "https://github.com/Yunanriv-hub/STmall/releases/tag/v0.3.5",
-  "assets": [
-    {
-      "type": "apk",
-      "platform": "android",
-      "url": "https://github.com/Yunanriv-hub/STmall/releases/download/v0.3.5/STmall_0.3.5.apk",
-      "sha256": "ff1f97e1757018ca7a053d67837201076c81cc6d71a2062b70543388d8478463",
-      "size": 14582104
-    }
-  ]
+  "releaseNotes": "STmall 已暂时闭源并停止 GitHub 在线更新；本版本只通过本地 APK 分发。",
+  "releaseUrl": "",
+  "assets": []
 }

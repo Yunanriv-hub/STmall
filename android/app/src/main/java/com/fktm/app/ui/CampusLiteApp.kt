@@ -8,14 +8,22 @@ import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -91,6 +99,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -98,10 +107,13 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.fktm.app.BuildConfig
 import com.fktm.app.FktmApp
 import com.fktm.app.credential.LockCredential
 import com.fktm.app.settings.AppPreferences
 import com.fktm.app.settings.ThemeMode
+import com.fktm.app.ujing.ui.MainViewModel as UjingViewModel
+import com.fktm.app.ujing.ui.UjingFeatureScreen
 import com.fktm.app.vm.UnlockViewModel
 import com.fktm.app.vm.UnlockState
 import com.fktm.app.vm.WaterViewModel
@@ -133,7 +145,9 @@ import kotlinx.coroutines.delay
 
 private enum class CampusPage {
     Home,
+    Features,
     SmartDorm,
+    Ujing,
     MyHub,
     TmallProfile,
     IlifeProfile,
@@ -147,40 +161,60 @@ private fun CampusPage.isMyPage(): Boolean =
 
 private val CampusPage.depth: Int
     get() = when (this) {
-        CampusPage.Home -> 0
-        CampusPage.MyHub -> 1
+        CampusPage.Home,
+        CampusPage.Features,
+        CampusPage.MyHub,
+        -> 0
+
         CampusPage.SmartDorm,
+        CampusPage.Ujing,
         CampusPage.TmallProfile,
         CampusPage.IlifeProfile,
-        -> 2
+        -> 1
 
-        CampusPage.Settings -> 3
+        CampusPage.Settings -> 2
     }
+
+private enum class ModuleSection {
+    HOME,
+    FEATURES,
+}
 
 private enum class HomeModule(
     val key: String,
     val title: String,
     val description: String,
+    val section: ModuleSection,
 ) {
     SmartDorm(
         AppPreferences.MODULE_SMART_DORM,
         "智能宿舍",
         "门锁、饮水与宿舍服务",
+        ModuleSection.FEATURES,
     ),
     Ilife(
         AppPreferences.MODULE_ILIFE,
         "慧生活",
         "饮水、钱包、积分与账单",
+        ModuleSection.FEATURES,
+    ),
+    Ujing(
+        AppPreferences.MODULE_UJING,
+        "U净",
+        "洗衣机、洗鞋机与烘干机",
+        ModuleSection.FEATURES,
     ),
     QuickUnlock(
         AppPreferences.MODULE_QUICK_UNLOCK,
         "一键开门",
         "首页圆形蓝牙开锁按钮",
+        ModuleSection.HOME,
     ),
     QuickWater(
         AppPreferences.MODULE_QUICK_WATER,
         "一键接水",
         "首页圆形慧生活接水按钮",
+        ModuleSection.HOME,
     ),
 }
 
@@ -209,6 +243,7 @@ fun CampusLiteApp(
     }
     var page by rememberSaveable { mutableStateOf(CampusPage.Home) }
     var settingsOrigin by rememberSaveable { mutableStateOf(CampusPage.Home) }
+    var detailOrigin by rememberSaveable { mutableStateOf(CampusPage.Home) }
     var dormSection by rememberSaveable { mutableIntStateOf(0) }
     var showLockPicker by remember { mutableStateOf(false) }
     var themeReveal by remember { mutableStateOf<ThemeRevealSpec?>(null) }
@@ -250,7 +285,12 @@ fun CampusLiteApp(
             CampusPage.IlifeProfile,
             -> CampusPage.MyHub
 
-            CampusPage.MyHub -> CampusPage.Home
+            CampusPage.SmartDorm -> detailOrigin
+            CampusPage.Ujing -> CampusPage.Features
+            CampusPage.Features,
+            CampusPage.MyHub,
+            -> CampusPage.Home
+
             else -> CampusPage.Home
         }
     }
@@ -266,7 +306,7 @@ fun CampusLiteApp(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    val showTopActions = page == CampusPage.Home || page == CampusPage.MyHub
+    val showTopActions = page.depth == 0
     val showBottomBar = page != CampusPage.Settings
     val glassBackdrop = rememberLayerBackdrop()
     val backgroundBackdrop = rememberLayerBackdrop()
@@ -306,7 +346,17 @@ fun CampusLiteApp(
                     containerColor = Color.Transparent,
                     contentColor = MaterialTheme.colorScheme.onBackground,
                     topBar = {
-                        if (showTopActions) {
+                        AnimatedVisibility(
+                            visible = showTopActions,
+                            enter = expandVertically(
+                                animationSpec = tween(260, easing = FastOutSlowInEasing),
+                                expandFrom = Alignment.Top,
+                            ),
+                            exit = shrinkVertically(
+                                animationSpec = tween(180),
+                                shrinkTowards = Alignment.Top,
+                            ),
+                        ) {
                             Spacer(
                                 Modifier
                                     .fillMaxWidth()
@@ -316,14 +366,12 @@ fun CampusLiteApp(
                         }
                     },
                     bottomBar = {
-                        if (showBottomBar) {
-                            Spacer(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .navigationBarsPadding()
-                                    .height(80.dp)
-                            )
-                        }
+                        Spacer(
+                            Modifier
+                                .fillMaxWidth()
+                                .navigationBarsPadding()
+                                .height(80.dp)
+                        )
                     },
                     ) { innerPadding ->
                         Box(
@@ -337,16 +385,37 @@ fun CampusLiteApp(
                                     val animationsEnabled =
                                         ValueAnimator.areAnimatorsEnabled()
                                     if (animationsEnabled && initialState != targetState) {
-                                        val direction =
-                                            if (targetState.depth >= initialState.depth) 1 else -1
+                                        val movingForward =
+                                            targetState.depth >= initialState.depth
+                                        val isTopLevelSwitch =
+                                            initialState.depth == 0 && targetState.depth == 0
+                                        val direction = if (movingForward) 1 else -1
+                                        val enterDuration = if (isTopLevelSwitch) 300 else 380
+                                        val exitDuration = if (isTopLevelSwitch) 240 else 300
+                                        val enterSpec = tween<Float>(enterDuration, easing = FastOutSlowInEasing)
+                                        val exitSpec = tween<Float>(exitDuration, easing = FastOutSlowInEasing)
+                                        val enterOffsetSpec =
+                                            tween<IntOffset>(enterDuration, easing = FastOutSlowInEasing)
+                                        val exitOffsetSpec =
+                                            tween<IntOffset>(exitDuration, easing = FastOutSlowInEasing)
                                         (
-                                            slideInHorizontally(tween(360)) {
-                                                it * direction / 2
-                                            } + fadeIn(tween(180))
+                                            slideInHorizontally(enterOffsetSpec) {
+                                                if (isTopLevelSwitch) 0 else it * direction / 5
+                                            } +
+                                                scaleIn(
+                                                    animationSpec = enterSpec,
+                                                    initialScale = if (isTopLevelSwitch) 0.97f else 0.94f,
+                                                ) +
+                                                fadeIn(enterSpec)
                                         ) togetherWith (
-                                            slideOutHorizontally(tween(320)) {
-                                                -it * direction / 4
-                                            } + fadeOut(tween(150))
+                                            slideOutHorizontally(exitOffsetSpec) {
+                                                if (isTopLevelSwitch) 0 else -it * direction / 12
+                                            } +
+                                                scaleOut(
+                                                    animationSpec = exitSpec,
+                                                    targetScale = if (isTopLevelSwitch) 1.02f else 0.98f,
+                                                ) +
+                                                fadeOut(exitSpec)
                                         )
                                     } else {
                                         fadeIn(tween(if (animationsEnabled) 180 else 0)) togetherWith
@@ -358,16 +427,11 @@ fun CampusLiteApp(
                             when (targetPage) {
                 CampusPage.Home -> CampusHome(
                     onSmartDorm = {
+                        detailOrigin = CampusPage.Home
                         dormSection = 0
                         page = CampusPage.SmartDorm
                     },
-                    onIlife = {
-                        context.startActivity(
-                            Intent(context, ConfigActivity::class.java)
-                                .putExtra(ConfigActivity.EXTRA_HIDE_MINE, true)
-                                .putExtra(ConfigActivity.EXTRA_THEME_MODE, themeMode.storedValue)
-                        )
-                    },
+                    onIlife = { page = CampusPage.IlifeProfile },
                     credential = (context.applicationContext as FktmApp)
                         .credentialStore.primary(),
                     onChangeDefaultLock = { showLockPicker = true },
@@ -378,15 +442,36 @@ fun CampusLiteApp(
                     darkTheme = darkTheme,
                 )
 
+                CampusPage.Features -> FeatureHubScreen(
+                    enabledModules = enabledModules,
+                    onSmartDorm = {
+                        detailOrigin = CampusPage.Features
+                        dormSection = 0
+                        page = CampusPage.SmartDorm
+                    },
+                    onIlife = { page = CampusPage.IlifeProfile },
+                    onUjing = { page = CampusPage.Ujing },
+                    onOpenSettings = { openSettings(CampusPage.Features) },
+                )
+
                 CampusPage.SmartDorm -> SmartDormScreen(
                     selectedSection = dormSection,
                     onSectionChange = { dormSection = it },
-                    onBack = { page = CampusPage.Home },
+                    onBack = { page = detailOrigin },
                     lockVm = lockVm,
                     waterVm = waterVm,
                     onRequestBlePermissions = onRequestBlePermissions,
                     onEnsureNotificationPermission = onEnsureNotificationPermission,
                 )
+
+                CampusPage.Ujing -> {
+                    val ujingVm: UjingViewModel = viewModel()
+                    UjingFeatureScreen(
+                        vm = ujingVm,
+                        onBack = { page = CampusPage.Features },
+                        onRequestBlePermissions = onRequestBlePermissions,
+                    )
+                }
 
                 CampusPage.MyHub -> MyHubScreen(
                     onTmall = { page = CampusPage.TmallProfile },
@@ -428,16 +513,28 @@ fun CampusLiteApp(
                 }
             }
 
-            if (showTopActions) {
+            AnimatedVisibility(
+                visible = showTopActions,
+                enter = fadeIn(tween(220)) + scaleIn(
+                    animationSpec = tween(260, easing = FastOutSlowInEasing),
+                    initialScale = 0.9f,
+                ),
+                exit = fadeOut(tween(140)) + scaleOut(
+                    animationSpec = tween(160),
+                    targetScale = 0.9f,
+                ),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .statusBarsPadding()
+                    .padding(top = 16.dp, end = 20.dp, bottom = 8.dp),
+            ) {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .statusBarsPadding()
-                        .padding(top = 16.dp, end = 20.dp, bottom = 8.dp),
+                        .fillMaxWidth(),
                     contentAlignment = Alignment.TopEnd,
                 ) {
                     LiquidGlassTopActions(
-                        showThemeToggle = page == CampusPage.Home,
+                        showThemeToggle = page.depth == 0,
                         darkTheme = darkTheme,
                         enabled = themeReveal == null,
                         onThemeToggle = { center ->
@@ -454,14 +551,35 @@ fun CampusLiteApp(
                 }
             }
 
-            if (showBottomBar) {
+            AnimatedVisibility(
+                visible = showBottomBar,
+                enter = fadeIn(tween(220)) + slideInVertically(
+                    animationSpec = tween(320, easing = FastOutSlowInEasing),
+                    initialOffsetY = { it / 2 },
+                ),
+                exit = fadeOut(tween(140)) + slideOutVertically(
+                    animationSpec = tween(200),
+                    targetOffsetY = { it / 3 },
+                ),
+                modifier = Modifier.align(Alignment.BottomCenter),
+            ) {
                 LiquidGlassBottomBar(
-                    selectedIndex = if (page.isMyPage()) 1 else 0,
+                    selectedIndex = when {
+                        page == CampusPage.Home -> 0
+                        page == CampusPage.Features ||
+                            page == CampusPage.SmartDorm ||
+                            page == CampusPage.Ujing -> 1
+                        else -> 2
+                    },
                     onSelected = { index ->
-                        page = if (index == 0) CampusPage.Home else CampusPage.MyHub
+                        page = when (index) {
+                            0 -> CampusPage.Home
+                            1 -> CampusPage.Features
+                            else -> CampusPage.MyHub
+                        }
                     },
                     darkTheme = darkTheme,
-                    modifier = Modifier.align(Alignment.BottomCenter),
+                    modifier = Modifier,
                 )
             }
 
@@ -509,12 +627,7 @@ private fun CampusHome(
 ) {
     val quickEnabled = HomeModule.QuickUnlock in enabledModules
     val quickWaterEnabled = HomeModule.QuickWater in enabledModules
-    val cardModules = listOf(
-        HomeModule.SmartDorm,
-        HomeModule.Ilife,
-    )
-        .filter { it in enabledModules }
-    val onlyQuickActions = cardModules.isEmpty() && (quickEnabled || quickWaterEnabled)
+    val quickCount = listOf(quickEnabled, quickWaterEnabled).count { it }
 
     BoxWithConstraints(
         Modifier
@@ -524,17 +637,13 @@ private fun CampusHome(
         val compact = maxHeight < 700.dp
         val dense = maxHeight < 560.dp
         Column(
-            modifier = Modifier.fillMaxSize().padding(
-                top = 8.dp,
-                bottom = if (compact) 18.dp else 34.dp,
-            ),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = 8.dp, bottom = if (compact) 18.dp else 30.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            if (onlyQuickActions) {
-                Spacer(Modifier.weight(1.15f))
-            }
-            if (enabledModules.isEmpty()) {
-                Spacer(Modifier.weight(0.68f))
+            if (quickCount == 0) {
+                Spacer(Modifier.weight(0.72f))
                 Text(
                     "STmall",
                     fontSize = if (compact) 11.sp else 12.sp,
@@ -556,86 +665,128 @@ private fun CampusHome(
                     modifier = Modifier.padding(top = 6.dp),
                 )
                 Spacer(Modifier.height(if (compact) 18.dp else 34.dp))
-            }
-
-            if (enabledModules.isEmpty()) {
                 EmptyHomeState(onOpenSettings = onOpenSettings)
             } else {
-                val cardHeight = when {
-                    dense -> 112.dp
-                    cardModules.size == 1 && quickEnabled -> 178.dp
-                    cardModules.size == 1 && compact -> 184.dp
-                    cardModules.size == 1 -> 210.dp
-                    compact -> 132.dp
-                    else -> 154.dp
-                }
-                Column(
-                    Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(if (dense) 10.dp else 14.dp),
+                Spacer(Modifier.weight(if (quickCount == 1) 1.2f else 0.88f))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(if (dense) 12.dp else 18.dp),
+                    verticalAlignment = Alignment.Top,
                 ) {
-                    cardModules.chunked(2).forEach { rowModules ->
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(14.dp),
-                        ) {
-                            rowModules.forEach { module ->
-                                ModuleFeatureCard(
-                                    module = module,
-                                    modifier = Modifier.weight(1f),
-                                    height = cardHeight,
-                                    darkTheme = darkTheme,
-                                    onSmartDorm = onSmartDorm,
-                                    onIlife = onIlife,
-                                    dense = dense || cardModules.size > 1,
-                                )
-                            }
-                            if (rowModules.size == 1 && cardModules.size > 1) {
-                                Spacer(Modifier.weight(1f))
-                            }
-                        }
+                    if (quickEnabled) {
+                        QuickUnlockCircle(
+                            credential = credential,
+                            state = unlockState,
+                            onUnlock = onQuickUnlock,
+                            onManageLock = onSmartDorm,
+                            onChangeDefaultLock = onChangeDefaultLock,
+                            compact = compact,
+                            darkTheme = darkTheme,
+                            dense = dense,
+                        )
                     }
-                }
-
-                if (quickEnabled || quickWaterEnabled) {
-                    Spacer(Modifier.height(if (cardModules.isEmpty()) 8.dp else if (dense) 10.dp else 16.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(
-                            if (dense) 10.dp else 16.dp
-                        ),
-                        verticalAlignment = Alignment.Top,
-                    ) {
-                        if (quickEnabled) {
-                            QuickUnlockCircle(
-                                credential = credential,
-                                state = unlockState,
-                                onUnlock = onQuickUnlock,
-                                onManageLock = onSmartDorm,
-                                onChangeDefaultLock = onChangeDefaultLock,
-                                compact = compact,
-                                darkTheme = darkTheme,
-                                dense = dense,
-                            )
-                        }
-                        if (quickWaterEnabled) {
-                            HomeQuickWaterButton(
-                                compact = compact,
-                                darkTheme = darkTheme,
-                                dense = dense,
-                                onManage = onIlife,
-                            )
-                        }
+                    if (quickWaterEnabled) {
+                        HomeQuickWaterButton(
+                            compact = compact,
+                            darkTheme = darkTheme,
+                            dense = dense,
+                            onManage = onIlife,
+                        )
                     }
                 }
             }
-
-            Spacer(Modifier.weight(if (onlyQuickActions) 0.55f else 1f))
-            Text(
-                "无广告 · 凭证本地加密 · 仅连接必要服务",
-                fontSize = if (compact) 10.sp else 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.94f),
-                textAlign = TextAlign.Center,
-            )
+            Spacer(Modifier.weight(if (quickCount == 1) 0.72f else 1f))
         }
+    }
+}
+
+@Composable
+private fun FeatureHubScreen(
+    enabledModules: Set<HomeModule>,
+    onSmartDorm: () -> Unit,
+    onIlife: () -> Unit,
+    onUjing: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    val modules = HomeModule.entries.filter {
+        it.section == ModuleSection.FEATURES && it in enabledModules
+    }
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Text("功能", fontSize = 30.sp, fontWeight = FontWeight.Bold)
+        Text(
+            "校园服务集中入口",
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(4.dp))
+
+        if (modules.isEmpty()) {
+            Card(
+                Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                ),
+            ) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onOpenSettings)
+                        .padding(22.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text("功能页暂无模块", fontWeight = FontWeight.Bold)
+                    Text(
+                        "点右上角设置，选择要显示的功能模块",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
+            }
+        } else {
+            modules.forEach { module ->
+                val title = module.title
+                val subtitle = module.description
+                val badge = when (module) {
+                    HomeModule.SmartDorm -> "舍"
+                    HomeModule.Ilife -> "慧"
+                    HomeModule.Ujing -> "洗"
+                    else -> "·"
+                }
+                val container = when (module) {
+                    HomeModule.SmartDorm -> MaterialTheme.colorScheme.primaryContainer
+                    HomeModule.Ilife -> MaterialTheme.colorScheme.secondaryContainer
+                    HomeModule.Ujing -> MaterialTheme.colorScheme.tertiaryContainer
+                    else -> MaterialTheme.colorScheme.surfaceVariant
+                }
+                val content = when (module) {
+                    HomeModule.SmartDorm -> MaterialTheme.colorScheme.onPrimaryContainer
+                    HomeModule.Ilife -> MaterialTheme.colorScheme.onSecondaryContainer
+                    HomeModule.Ujing -> MaterialTheme.colorScheme.onTertiaryContainer
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                }
+                MyHubEntryCard(
+                    title = title,
+                    subtitle = subtitle,
+                    badge = badge,
+                    container = container,
+                    contentColor = content,
+                    onClick = when (module) {
+                        HomeModule.SmartDorm -> onSmartDorm
+                        HomeModule.Ilife -> onIlife
+                        HomeModule.Ujing -> onUjing
+                        else -> ({})
+                    },
+                )
+            }
+        }
+        Spacer(Modifier.height(12.dp))
     }
 }
 
@@ -652,32 +803,37 @@ private fun ModuleFeatureCard(
     val accent = when (module) {
         HomeModule.SmartDorm -> if (darkTheme) MaterialTheme.colorScheme.primary else Color(0xFF25735F)
         HomeModule.Ilife -> if (darkTheme) Color(0xFF8AB4F8) else Color(0xFF315F9C)
+        HomeModule.Ujing -> if (darkTheme) Color(0xFFC7A7FF) else Color(0xFF6E4AB0)
         HomeModule.QuickUnlock -> MaterialTheme.colorScheme.primary
         HomeModule.QuickWater -> MaterialTheme.colorScheme.secondary
     }
     val container = when (module) {
         HomeModule.SmartDorm -> if (darkTheme) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFE7F5F0)
         HomeModule.Ilife -> if (darkTheme) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFE8EEFB)
+        HomeModule.Ujing -> if (darkTheme) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFF2ECFF)
         HomeModule.QuickUnlock -> MaterialTheme.colorScheme.surfaceVariant
         HomeModule.QuickWater -> MaterialTheme.colorScheme.surfaceVariant
     }
     val title = when (module) {
         HomeModule.SmartDorm -> "智能宿舍"
         HomeModule.Ilife -> "慧生活"
+        HomeModule.Ujing -> "U净"
         HomeModule.QuickUnlock -> "一键开门"
         HomeModule.QuickWater -> "一键接水"
     }
     val subtitle = when (module) {
         HomeModule.SmartDorm -> "门锁 · 饮水"
         HomeModule.Ilife -> "钱包 · 积分 · 账单"
+        HomeModule.Ujing -> "洗衣 · 洗鞋 · 烘干"
         HomeModule.QuickUnlock -> "快速开门"
         HomeModule.QuickWater -> "默认饮水机"
     }
-    val onClick = when (module) {
-        HomeModule.SmartDorm -> onSmartDorm
-        HomeModule.Ilife -> onIlife
-        HomeModule.QuickUnlock -> onSmartDorm
-        HomeModule.QuickWater -> onIlife
+    val onClick: () -> Unit = when (module) {
+        HomeModule.SmartDorm -> ({ onSmartDorm() })
+        HomeModule.Ilife -> ({ onIlife() })
+        HomeModule.Ujing -> ({})
+        HomeModule.QuickUnlock -> ({ onSmartDorm() })
+        HomeModule.QuickWater -> ({ onIlife() })
     }
     FeatureCard(
         modifier = modifier,
@@ -687,6 +843,7 @@ private fun ModuleFeatureCard(
             when (module) {
                 HomeModule.SmartDorm -> SmartDormGlyph(color)
                 HomeModule.Ilife -> IlifeGlyph(color)
+                HomeModule.Ujing -> UjingGlyph(color)
                 HomeModule.QuickUnlock -> SmartDormGlyph(color)
                 HomeModule.QuickWater -> WaterDropGlyph(color)
             }
@@ -872,6 +1029,7 @@ private fun QuickUnlockCircle(
             Modifier
                 .size(if (dense) 96.dp else if (compact) 132.dp else 154.dp)
                 .then(surfaceModifier)
+                .clip(CircleShape)
                 .combinedClickable(
                     enabled = !working,
                     interactionSource = interaction,
@@ -968,6 +1126,7 @@ private fun HomeQuickWaterButton(
                 .graphicsLayer {
                     catalogPressTransform(catalogInteraction, 1.04f)
                 }
+                .clip(CircleShape)
                 .semantics {
                     contentDescription = "一键接水"
                 }
@@ -1243,7 +1402,7 @@ private fun FeatureCard(
                 indication = null,
                 onClick = onClick,
             )
-            .then(catalogInteraction.modifier)
+            .then(catalogInteraction.clippedModifier(shape))
             .then(catalogInteraction.gestureModifier)
             .padding(if (dense) 10.dp else 18.dp),
     ) {
@@ -1433,6 +1592,31 @@ private fun IlifeGlyph(color: Color) {
             end = Offset(size.width * 0.64f, size.height * 0.6f),
             strokeWidth = 2.dp.toPx(),
             cap = StrokeCap.Round,
+        )
+    }
+}
+
+@Composable
+private fun UjingGlyph(color: Color) {
+    Canvas(Modifier.fillMaxSize()) {
+        val stroke = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round)
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(size.width * 0.16f, size.height * 0.12f),
+            size = Size(size.width * 0.68f, size.height * 0.76f),
+            cornerRadius = CornerRadius(size.width * 0.1f),
+            style = stroke,
+        )
+        drawCircle(
+            color = color,
+            radius = size.minDimension * 0.19f,
+            center = Offset(size.width * 0.5f, size.height * 0.57f),
+            style = stroke,
+        )
+        drawCircle(
+            color = color,
+            radius = size.minDimension * 0.035f,
+            center = Offset(size.width * 0.68f, size.height * 0.25f),
         )
     }
 }
@@ -1725,7 +1909,7 @@ private fun MyHubEntryCard(
                 indication = null,
                 onClick = onClick,
             )
-            .then(catalogInteraction.modifier)
+            .then(catalogInteraction.clippedModifier(shape))
             .then(catalogInteraction.gestureModifier),
     ) {
         Canvas(Modifier.matchParentSize()) {
@@ -2038,7 +2222,7 @@ private fun SettingsScreen(
     ) {
         LiquidGlassHeader(
             title = "界面设置",
-            subtitle = "首页布局与应用外观",
+            subtitle = "主页、功能页与应用外观",
             onBack = onBack,
         )
 
@@ -2069,10 +2253,11 @@ private fun SettingsScreen(
         }
 
         SettingsCard(
-            title = "首页模块",
-            subtitle = "关闭模块后首页会自动重排；隐藏全部模块时会显示设置引导。",
+            title = "主页模块",
+            subtitle = "控制主页的两个快捷动作；功能入口统一放在功能页。",
         ) {
-            HomeModule.entries.forEachIndexed { index, module ->
+            val homeModules = HomeModule.entries.filter { it.section == ModuleSection.HOME }
+            homeModules.forEachIndexed { index, module ->
                 ModuleToggleRow(
                     title = module.title,
                     subtitle = module.description,
@@ -2081,7 +2266,30 @@ private fun SettingsScreen(
                         onModuleToggle(module, it)
                     },
                 )
-                if (index != HomeModule.entries.lastIndex) {
+                if (index != homeModules.lastIndex) {
+                    HorizontalDivider(
+                        Modifier.padding(horizontal = 16.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                    )
+                }
+            }
+        }
+
+        SettingsCard(
+            title = "功能页模块",
+            subtitle = "关闭后功能页会隐藏对应入口；主页快捷动作不会在这里重复出现。",
+        ) {
+            val featureModules = HomeModule.entries.filter { it.section == ModuleSection.FEATURES }
+            featureModules.forEachIndexed { index, module ->
+                ModuleToggleRow(
+                    title = module.title,
+                    subtitle = module.description,
+                    checked = module in enabledModules,
+                    onCheckedChange = {
+                        onModuleToggle(module, it)
+                    },
+                )
+                if (index != featureModules.lastIndex) {
                     HorizontalDivider(
                         Modifier.padding(horizontal = 16.dp),
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
@@ -2094,7 +2302,7 @@ private fun SettingsScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 12.dp),
             ) {
-                Text("恢复全部首页模块")
+                Text("恢复全部模块")
             }
         }
 
@@ -2123,7 +2331,7 @@ private fun SettingsScreen(
 
         SettingsCard(
             title = "关于与安全",
-            subtitle = "STmall 0.2.6",
+            subtitle = "STmall ${BuildConfig.VERSION_NAME}",
         ) {
             Column(
                 Modifier.padding(horizontal = 16.dp, vertical = 12.dp),

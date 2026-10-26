@@ -4,6 +4,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.kotlin.plugin.serialization")
 }
 
 // release 签名从 keystore.properties 读取（该文件 + .jks 都在 .gitignore 里，不入库）。
@@ -23,8 +24,8 @@ android {
         applicationId = "com.rea.campuslite"
         minSdk = 26
         targetSdk = 36
-        versionCode = 20
-        versionName = "0.3.5"
+        versionCode = 21
+        versionName = "0.4.0"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -67,6 +68,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
         // Shizuku UserService 靠 AIDL 跨进程调用（在 shell 身份的独立进程里跑 logcat）
         aidl = true
     }
@@ -98,6 +100,9 @@ dependencies {
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
+    implementation("com.alipay.sdk:alipaysdk-android:15.8.16")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     // Shizuku：借 shell 身份读 logcat（普通 App 从 Android 4.1 起读不到别的进程日志）
     implementation("dev.rikka.shizuku:api:13.1.5")
@@ -110,6 +115,7 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:1.4.2")
     implementation("androidx.camera:camera-view:1.4.2")
     implementation("com.google.zxing:core:3.5.3")
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 

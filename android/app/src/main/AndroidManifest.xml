@@ -25,10 +25,6 @@
 
     <!-- 检查更新需要联网。注意：**开锁全程不联网**，这里只为更新功能而申请。 -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- 「下载并安装」要拉起系统安装器；普通权限，无需运行时申请，
-         但用户在系统设置里得打开「允许安装未知应用」。 -->
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
-
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
     <!-- NFC 是增强入口，不应阻止无 NFC 手机安装其他功能 -->
     <uses-feature android:name="android.hardware.nfc" android:required="false" />
@@ -38,6 +34,7 @@
     <queries>
         <package android:name="com.tmall.campus.and" />
         <package android:name="moe.shizuku.privileged.api" />
+        <package android:name="com.eg.android.AlipayGphone" />
     </queries>
 
     <application
@@ -109,6 +106,14 @@
             android:name=".scan.DeviceScanActivity"
             android:exported="false"
             android:screenOrientation="portrait" />
+
+        <activity
+            android:name="com.journeyapps.barcodescanner.CaptureActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.FkTM"
+            android:windowSoftInputMode="stateAlwaysHidden"
+            tools:replace="android:screenOrientation,android:theme" />
 
         <activity
             android:name=".MainActivity"

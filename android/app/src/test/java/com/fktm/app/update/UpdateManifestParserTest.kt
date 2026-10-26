@@ -239,20 +239,10 @@ class UpdateManifestParserTest {
     // ------------------------------------------------------------ 源列表
 
     @Test
-    fun sourcesAreOrderedMirrorsFirstThenGithubDirect() {
-        val sources = UpdateSources.all
-
-        assertEquals("GitHub", sources.last().name)
-        assertEquals(UpdateSources.MANIFEST_URL, sources.last().manifestUrl)
-
-        sources.dropLast(1).forEach { mirror ->
-            assertTrue(
-                "镜像源必须是前缀代理格式: ${mirror.manifestUrl}",
-                mirror.manifestUrl.endsWith("/${UpdateSources.MANIFEST_URL}"),
-            )
-            assertEquals(UpdateSources.PROXY_TIMEOUT_MILLIS, mirror.timeoutMillis)
-        }
-        assertEquals(UpdateSources.GITHUB_TIMEOUT_MILLIS, sources.last().timeoutMillis)
-        assertTrue("直连超时应当比代理宽松", sources.last().timeoutMillis > sources.first().timeoutMillis)
+    fun closedSourceBuildHasNoOnlineUpdateSources() {
+        assertTrue(
+            "闭源版本不得自动请求 GitHub 或第三方更新镜像",
+            UpdateSources.all.isEmpty(),
+        )
     }
 }
