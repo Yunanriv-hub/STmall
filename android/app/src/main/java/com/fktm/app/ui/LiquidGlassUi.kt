@@ -1083,7 +1083,7 @@ internal fun ThemeRevealOverlay(
             color = targetColor,
             radius = radius,
             center = spec.center,
-            alpha = fade.value,
+            alpha = 0.18f * fade.value,
         )
     }
 }

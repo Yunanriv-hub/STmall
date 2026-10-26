@@ -20,6 +20,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -35,6 +37,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button as MaterialButton
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ButtonElevation
+import androidx.compose.material3.CardColors
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CardElevation
 import androidx.compose.material3.FilledTonalButton as MaterialFilledTonalButton
 import androidx.compose.material3.IconButton as MaterialIconButton
 import androidx.compose.material3.LocalContentColor
@@ -59,6 +64,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
@@ -100,6 +106,234 @@ import kotlin.math.tanh
 
 internal val LocalHuishengGlassBackdrop = staticCompositionLocalOf<LayerBackdrop?> { null }
 internal val LocalHuishengGlassEnabled = staticCompositionLocalOf { true }
+
+@Composable
+internal fun HuishengGlassCard(
+    modifier: Modifier = Modifier,
+    shape: Shape = RoundedCornerShape(24.dp),
+    colors: CardColors = CardDefaults.cardColors(),
+    elevation: CardElevation = CardDefaults.cardElevation(),
+    border: BorderStroke? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    HuishengGlassSurfaceContainer(
+        modifier = modifier,
+        shape = shape,
+        color = colors.containerColor,
+        contentColor = colors.contentColor,
+        border = border,
+        elevated = true,
+        onClick = null,
+        enabled = true,
+        suppliedInteractionSource = null,
+    ) {
+        Column(Modifier.fillMaxWidth(), content = content)
+    }
+}
+
+@Composable
+internal fun HuishengGlassCard(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    shape: Shape = RoundedCornerShape(24.dp),
+    colors: CardColors = CardDefaults.cardColors(),
+    elevation: CardElevation = CardDefaults.cardElevation(),
+    border: BorderStroke? = null,
+    interactionSource: MutableInteractionSource? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    HuishengGlassSurfaceContainer(
+        modifier = modifier,
+        shape = shape,
+        color = colors.containerColor,
+        contentColor = colors.contentColor,
+        border = border,
+        elevated = true,
+        onClick = onClick,
+        enabled = enabled,
+        suppliedInteractionSource = interactionSource,
+    ) {
+        Column(Modifier.fillMaxWidth(), content = content)
+    }
+}
+
+@Composable
+internal fun HuishengGlassSurface(
+    modifier: Modifier = Modifier,
+    shape: Shape = RoundedCornerShape(24.dp),
+    color: Color = MaterialTheme.colorScheme.surface,
+    contentColor: Color = MaterialTheme.colorScheme.onSurface,
+    tonalElevation: androidx.compose.ui.unit.Dp = 0.dp,
+    shadowElevation: androidx.compose.ui.unit.Dp = 0.dp,
+    border: BorderStroke? = null,
+    content: @Composable () -> Unit,
+) {
+    HuishengGlassSurfaceContainer(
+        modifier = modifier,
+        shape = shape,
+        color = color,
+        contentColor = contentColor,
+        border = border,
+        elevated = shadowElevation > 0.dp,
+        onClick = null,
+        enabled = true,
+        suppliedInteractionSource = null,
+        content = content,
+    )
+}
+
+@Composable
+internal fun HuishengGlassSurface(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    shape: Shape = RoundedCornerShape(24.dp),
+    color: Color = MaterialTheme.colorScheme.surface,
+    contentColor: Color = MaterialTheme.colorScheme.onSurface,
+    tonalElevation: androidx.compose.ui.unit.Dp = 0.dp,
+    shadowElevation: androidx.compose.ui.unit.Dp = 0.dp,
+    border: BorderStroke? = null,
+    interactionSource: MutableInteractionSource? = null,
+    content: @Composable () -> Unit,
+) {
+    HuishengGlassSurfaceContainer(
+        modifier = modifier,
+        shape = shape,
+        color = color,
+        contentColor = contentColor,
+        border = border,
+        elevated = shadowElevation > 0.dp,
+        onClick = onClick,
+        enabled = enabled,
+        suppliedInteractionSource = interactionSource,
+        content = content,
+    )
+}
+
+@Composable
+private fun HuishengGlassSurfaceContainer(
+    modifier: Modifier,
+    shape: Shape,
+    color: Color,
+    contentColor: Color,
+    border: BorderStroke?,
+    elevated: Boolean,
+    onClick: (() -> Unit)?,
+    enabled: Boolean,
+    suppliedInteractionSource: MutableInteractionSource?,
+    content: @Composable () -> Unit,
+) {
+    val backdrop = LocalHuishengGlassBackdrop.current
+    val glassEnabled = LocalHuishengGlassEnabled.current
+    val useNativeGlass = glassEnabled &&
+        backdrop != null &&
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val backgroundColor = MaterialTheme.colorScheme.background
+    val interaction = suppliedInteractionSource ?: remember { MutableInteractionSource() }
+    val catalogInteraction = rememberCatalogGlassInteraction()
+    val clickModifier = if (onClick != null) {
+        Modifier
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                enabled = enabled,
+                onClick = onClick,
+            )
+            .then(catalogInteraction.gestureModifier)
+    } else {
+        Modifier
+    }
+    val surfaceModifier = when {
+        useNativeGlass -> Modifier.drawBackdrop(
+            backdrop = backdrop!!,
+            shape = { shape },
+            effects = {
+                vibrancy()
+                blur(5.dp.toPx())
+                lens(
+                    refractionHeight = 14.dp.toPx(),
+                    refractionAmount = 24.dp.toPx(),
+                    depthEffect = true,
+                    chromaticAberration = true,
+                )
+            },
+            highlight = { Highlight.Ambient },
+            shadow = {
+                Shadow.Default.copy(
+                    radius = if (elevated) 14.dp else 9.dp,
+                    color = Color.Black.copy(alpha = if (elevated) 0.16f else 0.1f),
+                )
+            },
+            layerBlock = {
+                catalogPressTransform(
+                    catalogInteraction,
+                    1f + 2.dp.toPx() / size.height.coerceAtLeast(1f),
+                )
+            },
+            onDrawSurface = {
+                drawRect(
+                    Brush.verticalGradient(
+                        listOf(
+                            color.copy(alpha = 0.34f),
+                            lerp(color, backgroundColor, 0.4f)
+                                .copy(alpha = 0.2f),
+                        )
+                    )
+                )
+                drawRect(
+                    Brush.radialGradient(
+                        listOf(Color.White.copy(alpha = 0.14f), Color.Transparent),
+                        center = Offset(size.width * 0.16f, 0f),
+                        radius = size.maxDimension * 0.82f,
+                    )
+                )
+            },
+        )
+
+        glassEnabled -> Modifier
+            .shadow(
+                elevation = if (elevated) 14.dp else 8.dp,
+                shape = shape,
+                clip = false,
+                ambientColor = Color.Black.copy(alpha = 0.14f),
+                spotColor = color.copy(alpha = 0.18f),
+            )
+            .clip(shape)
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        color.copy(alpha = 0.9f),
+                        lerp(color, backgroundColor, 0.34f)
+                            .copy(alpha = 0.72f),
+                    )
+                )
+            )
+            .border(1.dp, Color.White.copy(alpha = 0.2f), shape)
+
+        else -> Modifier
+            .clip(shape)
+            .background(color)
+    }
+    Box(
+        modifier
+            .then(surfaceModifier)
+            .then(clickModifier)
+            .then(catalogInteraction.clippedModifier(shape))
+            .then(catalogInteraction.modifier)
+    ) {
+        border?.let {
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .border(it, shape)
+            )
+        }
+        CompositionLocalProvider(LocalContentColor provides contentColor) {
+            content()
+        }
+    }
+}
 
 /**
  * Gives standalone Huisheng activities the same backdrop used by the embedded

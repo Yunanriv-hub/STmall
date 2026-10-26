@@ -16,14 +16,14 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Schedule
 import com.water.widget.ui.CatalogLiquidButton as Button
-import androidx.compose.material3.Card
+import com.water.widget.ui.HuishengGlassCard as Card
 import androidx.compose.material3.CardDefaults
 import com.water.widget.ui.CatalogLiquidFilterChip as FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import com.water.widget.ui.HuishengGlassSurface as Surface
 import androidx.compose.material3.Text
 import com.water.widget.ui.CatalogLiquidTextButton as TextButton
 import androidx.compose.runtime.Composable

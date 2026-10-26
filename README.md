@@ -36,7 +36,7 @@ STmall 将天猫校园的智能宿舍、蓝牙门锁、校园饮水，以及慧�
 ## 主要功能
 
 - 主界面分为“主页 / 功能 / 我的”三页，支持日间、跟随系统和纯黑暗黑模式。
-- “智能宿舍”“慧生活”“U净”“一键开门”“一键接水”“U净扫一扫”模块可独立显示或隐藏。
+- “智能宿舍”“慧生活”“U净”“胖乖生活”“一键开门”“一键接水”“扫一扫”“U净扫一扫”模块可独立显示或隐藏。
 - 自绘矢量图标与自适应布局，兼容不同屏幕尺寸、字体缩放和系统栏高度。
 - 底部液态玻璃导航栏通过官方 Backdrop 采样页面背景，叠加模糊、圆角透镜、
   高光、弹性胶囊和按压反馈。
@@ -49,12 +49,14 @@ STmall 将天猫校园的智能宿舍、蓝牙门锁、校园饮水，以及慧�
 - 支持慧生活钱包余额、充值、积分签到、任务执行与消费账单。
 - 支持 U净手机号登录、扫码收藏多台洗衣机、空闲状态、订单倒计时、
   Nordic/Cypress 蓝牙启动、机身时间同步与支付宝订单支付。
-- 主页提供一键开门、一键接水和 U净扫一扫；其余校园服务集中在横向功能卡片中。
+- 支持胖乖生活短信登录、扫码设备、最近设备、服务项和历史订单。
+- 主页提供一键开门、一键接水、胖乖扫一扫和 U净扫一扫；其余校园服务集中在横向功能卡片中。
 - STmall“我的”使用“天猫校园 / 慧生活”双入口，分别进入两套账户与服务。
 - “我的”还提供 U净账号入口；门锁、饮水机和 U净设备添加后均可重新命名。
 - 首页、 “我的”和模块子页统一使用液态玻璃组件与弹簧按压反馈。
 - 设置页提供液态玻璃总开关；关闭后按钮、单选控件、卡片和底栏统一使用
   无模糊、无透镜高光的纯色平面回退。
+- 慧生活登录、账户、钱包、积分、任务、设备添加及主页长按选择弹窗统一使用液态玻璃容器。
 - 日间/暗黑切换使用颜色渐变和触摸点扩散；文字保持在过渡遮罩上方。
 - 页面转场使用可连续打断的弹簧滑动，主题遮罩、文字与系统栏同步平滑换色。
 - 支持选择本机图片作为三页背景，并在重启后保持；也可一键恢复默认背景。
@@ -176,19 +178,23 @@ android/app/build/outputs/apk/release/app-release.apk
 [`life798.properties.example`](android/life798.properties.example) 复制后，
 填写你有权使用的本机配置。该文件已被 Git 忽略，不得随源码或 Release 分发。
 
+胖乖生活协议需要本地 `android/pangguai.properties`。可从
+[`pangguai.properties.example`](android/pangguai.properties.example) 复制后
+填写本机配置；真实值已被 Git 忽略，不应提交或公开。
+
 ## 当前版本
 
 | 项目 | 值 |
 |---|---|
-| 版本 | `0.4.2` |
-| versionCode | `23` |
+| 版本 | `0.5.0` |
+| versionCode | `24` |
 | 包名 | `com.rea.campuslite` |
 | minSdk | `26` |
 | targetSdk | `36` |
-| Release APK | `STmall_0.4.2.apk` |
-| SHA-256 | `3207F4C0FBE913BD660BFA4F3F1E761ABE4249492C65E50BB8B52B722C9BCD48` |
+| Release APK | `STmall_0.5.0.apk` |
+| SHA-256 | `5FE0E9D457F1724C3DDFB19E5FCB98E342B47F41122EA0209769E94BCA50F157` |
 
-该版本已通过 271 项 JVM 单元测试、release 编译、Android Lint 关键检查和
+该版本已通过 275 项 JVM 单元测试、release 编译、Android Lint 关键检查和
 v2 签名校验。
 
 ## 兼容性说明
@@ -200,6 +206,8 @@ v2 签名校验。
 - 已在 OnePlus PLQ110 上验证 STmall 首页、慧生活主页、登录页、NFC 页面和
   NFC 设备编号回填流程；实际标签写入仍需使用本人 NFC 标签验证。
 - 使用系统字体缩放 1.3 验证过文字不重叠、不被截断。
+- 已在 OPPO PGGM10 真机验证胖乖生活登录页、首页双扫码模块、扫描页单按钮、
+  慧生活底栏来源、玻璃弹窗以及功能页/我的页四张卡片对齐。
 - 已在 HONOR `Hera-BD00`、Android 11、无 Root 环境验证 Shizuku 启动、
   登录态导入、校园身份检查、饮水只读查询和门锁结果回传。
 - 不同厂商的窗口管理、状态栏高度、后台限制和 WebView 实现可能不同；
@@ -258,6 +266,9 @@ v2 签名校验。
   [LICENSE-AndroidLiquidGlass](LICENSE-AndroidLiquidGlass)。
 - life-798 参考项目采用 MIT License，许可文本见
   [LICENSE-life798](LICENSE-life798)。
+- 胖乖生活参考 `Night-stars-1/wash` 的公开接口行为，未复制其签名配置、
+  明文 Token 存储或源码；安全审查见
+  [PANGGUAI_SECURITY_AUDIT.md](docs/PANGGUAI_SECURITY_AUDIT.md)。
 - U净网络与蓝牙协议参考 `baijuqi/ujing-mini`，采用 MIT License，
   许可文本见 [LICENSE-ujing-mini](LICENSE-ujing-mini)。STmall 未复制
   `DUT-Ujing` 的签名密钥、Web 服务或项目代码。

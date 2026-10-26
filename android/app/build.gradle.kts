@@ -15,6 +15,11 @@ val keystoreProps = Properties().apply {
 }
 val hasReleaseSigning = keystorePropsFile.exists() &&
         !keystoreProps.getProperty("storeFile").isNullOrBlank()
+val pangguaiPropsFile = rootProject.file("pangguai.properties")
+val pangguaiProps = Properties().apply {
+    if (pangguaiPropsFile.exists()) pangguaiPropsFile.inputStream().use { load(it) }
+}
+val pangguaiAppSecret = pangguaiProps.getProperty("APP_SECRET", "")
 
 android {
     namespace = "com.fktm.app"
@@ -24,8 +29,14 @@ android {
         applicationId = "com.rea.campuslite"
         minSdk = 26
         targetSdk = 36
-        versionCode = 23
-        versionName = "0.4.2"
+        versionCode = 24
+        versionName = "0.5.0"
+        buildConfigField(
+            "String",
+            "PANGGUAI_APP_SECRET",
+            "\"${pangguaiAppSecret.replace("\\", "\\\\").replace("\"", "\\\"")}\"",
+        )
+        buildConfigField("String", "PANGGUAI_API_VERSION", "\"1.60.3\"")
         vectorDrawables { useSupportLibrary = true }
     }
 

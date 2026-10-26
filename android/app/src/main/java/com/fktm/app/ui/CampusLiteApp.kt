@@ -13,6 +13,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.animation.fadeIn
@@ -42,6 +43,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -112,6 +114,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -120,6 +124,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fktm.app.BuildConfig
 import com.fktm.app.FktmApp
 import com.fktm.app.credential.LockCredential
+import com.fktm.app.pangguai.PangguaiScreen
+import com.fktm.app.pangguai.PangguaiViewModel
 import com.fktm.app.scan.DeviceScanActivity
 import com.fktm.app.settings.AppPreferences
 import com.fktm.app.settings.ThemeMode
@@ -161,6 +167,7 @@ private enum class CampusPage {
     Features,
     SmartDorm,
     Ujing,
+    Pangguai,
     MyHub,
     TmallProfile,
     IlifeProfile,
@@ -181,6 +188,7 @@ private val CampusPage.depth: Int
 
         CampusPage.SmartDorm,
         CampusPage.Ujing,
+        CampusPage.Pangguai,
         CampusPage.TmallProfile,
         CampusPage.IlifeProfile,
         -> 1
@@ -217,6 +225,12 @@ private enum class HomeModule(
         "洗衣机、洗鞋机与烘干机",
         ModuleSection.FEATURES,
     ),
+    Pangguai(
+        AppPreferences.MODULE_PANGGUAI,
+        "胖乖生活",
+        "扫码洗护、最近设备与历史订单",
+        ModuleSection.FEATURES,
+    ),
     QuickUnlock(
         AppPreferences.MODULE_QUICK_UNLOCK,
         "一键开门",
@@ -233,6 +247,12 @@ private enum class HomeModule(
         AppPreferences.MODULE_UJING_SCAN,
         "U净扫一扫",
         "扫描机身二维码直达设备",
+        ModuleSection.HOME,
+    ),
+    PangguaiScanner(
+        AppPreferences.MODULE_PANGGUAI_SCAN,
+        "扫一扫",
+        "扫描胖乖设备二维码",
         ModuleSection.HOME,
     ),
 }
@@ -267,10 +287,12 @@ fun CampusLiteApp(
     var settingsOrigin by rememberSaveable { mutableStateOf(CampusPage.Home) }
     var detailOrigin by rememberSaveable { mutableStateOf(CampusPage.Home) }
     var ujingOrigin by rememberSaveable { mutableStateOf(CampusPage.Features) }
+    var pangguaiOrigin by rememberSaveable { mutableStateOf(CampusPage.Features) }
     var dormSection by rememberSaveable { mutableIntStateOf(0) }
     var showLockPicker by remember { mutableStateOf(false) }
     var themeReveal by remember { mutableStateOf<ThemeRevealSpec?>(null) }
     val ujingVm: UjingViewModel = viewModel()
+    val pangguaiVm: PangguaiViewModel = viewModel()
     val homeUjingScanLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -282,6 +304,20 @@ fun CampusLiteApp(
         ujingVm.onScan(raw)
         ujingOrigin = CampusPage.Home
         page = CampusPage.Ujing
+    }
+    val homePangguaiScanLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
+        pangguaiVm.onScanned(result.data?.getStringExtra(DeviceScanActivity.EXTRA_RESULT))
+        pangguaiOrigin = CampusPage.Home
+        page = CampusPage.Pangguai
+    }
+    val pangguaiScanLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
+        pangguaiVm.onScanned(result.data?.getStringExtra(DeviceScanActivity.EXTRA_RESULT))
     }
     var enabledModules by remember {
         mutableStateOf(
@@ -323,6 +359,7 @@ fun CampusLiteApp(
 
             CampusPage.SmartDorm -> detailOrigin
             CampusPage.Ujing -> ujingOrigin
+            CampusPage.Pangguai -> pangguaiOrigin
             CampusPage.Features,
             CampusPage.MyHub,
             -> CampusPage.Home
@@ -391,26 +428,7 @@ fun CampusLiteApp(
                     Scaffold(
                     containerColor = Color.Transparent,
                     contentColor = MaterialTheme.colorScheme.onBackground,
-                    topBar = {
-                        AnimatedVisibility(
-                            visible = showTopActions,
-                            enter = expandVertically(
-                                animationSpec = tween(260, easing = FastOutSlowInEasing),
-                                expandFrom = Alignment.Top,
-                            ),
-                            exit = shrinkVertically(
-                                animationSpec = tween(180, easing = FastOutSlowInEasing),
-                                shrinkTowards = Alignment.Top,
-                            ),
-                        ) {
-                            Spacer(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .statusBarsPadding()
-                                    .height(70.dp)
-                            )
-                        }
-                    },
+                    topBar = {},
                     bottomBar = {
                         Spacer(
                             Modifier
@@ -445,8 +463,8 @@ fun CampusLiteApp(
                                         }
                                         val direction = if (movingForward) 1 else -1
                                         val offsetSpec = spring<IntOffset>(
-                                            dampingRatio = 0.9f,
-                                            stiffness = 460f,
+                                            dampingRatio = 1f,
+                                            stiffness = 520f,
                                         )
                                         slideInHorizontally(offsetSpec) {
                                             it * direction
@@ -480,6 +498,9 @@ fun CampusLiteApp(
                     onUjingScan = {
                         homeUjingScanLauncher.launch(DeviceScanActivity.intent(context))
                     },
+                    onPangguaiScan = {
+                        homePangguaiScanLauncher.launch(DeviceScanActivity.intent(context))
+                    },
                     enabledModules = enabledModules,
                     darkTheme = darkTheme,
                 )
@@ -498,6 +519,10 @@ fun CampusLiteApp(
                     onUjing = {
                         ujingOrigin = CampusPage.Features
                         page = CampusPage.Ujing
+                    },
+                    onPangguai = {
+                        pangguaiOrigin = CampusPage.Features
+                        page = CampusPage.Pangguai
                     },
                     onOpenSettings = { openSettings(CampusPage.Features) },
                 )
@@ -520,6 +545,14 @@ fun CampusLiteApp(
                     )
                 }
 
+                CampusPage.Pangguai -> PangguaiScreen(
+                    vm = pangguaiVm,
+                    onBack = { page = pangguaiOrigin },
+                    onScan = {
+                        pangguaiScanLauncher.launch(DeviceScanActivity.intent(context))
+                    },
+                )
+
                 CampusPage.MyHub -> MyHubScreen(
                     onTmall = {
                         detailOrigin = CampusPage.MyHub
@@ -532,6 +565,10 @@ fun CampusLiteApp(
                     onUjing = {
                         ujingOrigin = CampusPage.MyHub
                         page = CampusPage.Ujing
+                    },
+                    onPangguai = {
+                        pangguaiOrigin = CampusPage.MyHub
+                        page = CampusPage.Pangguai
                     },
                 )
 
@@ -628,14 +665,39 @@ fun CampusLiteApp(
                 modifier = Modifier.align(Alignment.BottomCenter),
             ) {
                 LiquidGlassBottomBar(
-                    selectedIndex = when {
-                        page == CampusPage.Home -> 0
-                        page == CampusPage.Features ||
-                            page == CampusPage.SmartDorm ||
-                            page == CampusPage.Ujing && ujingOrigin == CampusPage.Features -> 1
-                        page == CampusPage.Ujing && ujingOrigin == CampusPage.MyHub -> 2
-                        page == CampusPage.Ujing -> 0
-                        else -> 2
+                    selectedIndex = when (page) {
+                        CampusPage.Home -> 0
+                        CampusPage.Features -> 1
+                        CampusPage.MyHub,
+                        CampusPage.TmallProfile,
+                        -> 2
+                        CampusPage.SmartDorm -> when (detailOrigin) {
+                            CampusPage.Home -> 0
+                            CampusPage.Features -> 1
+                            else -> 2
+                        }
+                        CampusPage.IlifeProfile -> when (detailOrigin) {
+                            CampusPage.Home -> 0
+                            CampusPage.Features -> 1
+                            else -> 2
+                        }
+                        CampusPage.Ujing -> when (ujingOrigin) {
+                            CampusPage.Home -> 0
+                            CampusPage.Features -> 1
+                            else -> 2
+                        }
+                        CampusPage.Pangguai -> when (pangguaiOrigin) {
+                            CampusPage.Home -> 0
+                            CampusPage.Features -> 1
+                            else -> 2
+                        }
+                        CampusPage.Settings -> settingsOrigin.let {
+                            when (it) {
+                                CampusPage.Features -> 1
+                                CampusPage.MyHub -> 2
+                                else -> 0
+                            }
+                        }
                     },
                     onSelected = { index ->
                         page = when (index) {
@@ -682,6 +744,15 @@ private fun BackgroundImageLayer(uri: String?, darkTheme: Boolean) {
         }
     }
     bitmap?.let { image ->
+        val scrim by animateColorAsState(
+            targetValue = if (darkTheme) {
+                Color.Black.copy(alpha = 0.48f)
+            } else {
+                Color.White.copy(alpha = 0.38f)
+            },
+            animationSpec = tween(360, easing = FastOutSlowInEasing),
+            label = "background-image-scrim",
+        )
         Image(
             bitmap = image,
             contentDescription = null,
@@ -691,10 +762,7 @@ private fun BackgroundImageLayer(uri: String?, darkTheme: Boolean) {
         Box(
             Modifier
                 .fillMaxSize()
-                .background(
-                    if (darkTheme) Color.Black.copy(alpha = 0.48f)
-                    else Color.White.copy(alpha = 0.38f)
-                )
+                .background(scrim)
         )
     }
 }
@@ -709,18 +777,23 @@ private fun CampusHome(
     onChangeDefaultLock: () -> Unit,
     onOpenSettings: () -> Unit,
     onUjingScan: () -> Unit,
+    onPangguaiScan: () -> Unit,
     enabledModules: Set<HomeModule>,
     darkTheme: Boolean,
 ) {
     val quickEnabled = HomeModule.QuickUnlock in enabledModules
     val quickWaterEnabled = HomeModule.QuickWater in enabledModules
     val ujingScanEnabled = HomeModule.UjingScanner in enabledModules
+    val pangguaiScanEnabled = HomeModule.PangguaiScanner in enabledModules
     val quickCount = listOf(quickEnabled, quickWaterEnabled).count { it }
-    val hasHomeAction = quickCount > 0 || ujingScanEnabled
+    val scanCount = listOf(ujingScanEnabled, pangguaiScanEnabled).count { it }
+    val hasHomeAction = quickCount > 0 || scanCount > 0
 
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
+            .statusBarsPadding()
+            .padding(top = 70.dp)
             .padding(horizontal = 24.dp),
     ) {
         val compact = maxHeight < 700.dp
@@ -784,12 +857,33 @@ private fun CampusHome(
                         }
                     }
                 }
-                if (ujingScanEnabled) {
+                if (scanCount > 0) {
                     Spacer(Modifier.height(if (compact) 14.dp else 22.dp))
-                    HomeUjingScanButton(
-                        compact = compact,
-                        onScan = onUjingScan,
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(if (scanCount == 1) 0.72f else 1f),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        if (pangguaiScanEnabled) {
+                            HomeScanButton(
+                                title = "扫一扫",
+                                subtitle = "胖乖设备",
+                                accent = MaterialTheme.colorScheme.secondary,
+                                compact = compact,
+                                onScan = onPangguaiScan,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        if (ujingScanEnabled) {
+                            HomeScanButton(
+                                title = "U净扫一扫",
+                                subtitle = "U净设备",
+                                accent = MaterialTheme.colorScheme.tertiary,
+                                compact = compact,
+                                onScan = onUjingScan,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
                 }
             }
             Spacer(Modifier.weight(if (quickCount <= 1) 0.72f else 1f))
@@ -798,32 +892,36 @@ private fun CampusHome(
 }
 
 @Composable
-private fun HomeUjingScanButton(
+private fun HomeScanButton(
+    title: String,
+    subtitle: String,
+    accent: Color,
     compact: Boolean,
     onScan: () -> Unit,
+    modifier: Modifier,
 ) {
-    val accent = MaterialTheme.colorScheme.tertiary
     OutlinedButton(
         onClick = onScan,
-        modifier = Modifier
-            .height(if (compact) 58.dp else 64.dp)
-            .width(if (compact) 230.dp else 250.dp),
+        modifier = modifier
+            .height(if (compact) 58.dp else 64.dp),
         shape = RoundedCornerShape(percent = 50),
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
     ) {
         ScannerGlyph(accent)
-        Spacer(Modifier.width(9.dp))
-        Column(horizontalAlignment = Alignment.Start) {
+        Spacer(Modifier.width(7.dp))
+        Column(Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
             Text(
-                "U净扫一扫",
-                fontSize = if (compact) 13.sp else 14.sp,
+                title,
+                fontSize = if (compact) 12.sp else 13.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
             )
             Text(
-                "扫描机身二维码，直接进入设备",
-                fontSize = 9.5.sp,
+                subtitle,
+                fontSize = 9.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
             )
         }
     }
@@ -835,6 +933,7 @@ private fun FeatureHubScreen(
     onSmartDorm: () -> Unit,
     onIlife: () -> Unit,
     onUjing: () -> Unit,
+    onPangguai: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     val modules = HomeModule.entries.filter {
@@ -844,7 +943,8 @@ private fun FeatureHubScreen(
         Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 18.dp),
+            .statusBarsPadding()
+            .padding(top = 88.dp, start = 20.dp, end = 20.dp, bottom = 18.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         HubPageHeader(
@@ -884,18 +984,21 @@ private fun FeatureHubScreen(
                     HomeModule.SmartDorm -> "舍"
                     HomeModule.Ilife -> "慧"
                     HomeModule.Ujing -> "洗"
+                    HomeModule.Pangguai -> "胖"
                     else -> "·"
                 }
                 val container = when (module) {
                     HomeModule.SmartDorm -> MaterialTheme.colorScheme.primaryContainer
                     HomeModule.Ilife -> MaterialTheme.colorScheme.secondaryContainer
                     HomeModule.Ujing -> MaterialTheme.colorScheme.tertiaryContainer
+                    HomeModule.Pangguai -> MaterialTheme.colorScheme.surfaceVariant
                     else -> MaterialTheme.colorScheme.surfaceVariant
                 }
                 val content = when (module) {
                     HomeModule.SmartDorm -> MaterialTheme.colorScheme.onPrimaryContainer
                     HomeModule.Ilife -> MaterialTheme.colorScheme.onSecondaryContainer
                     HomeModule.Ujing -> MaterialTheme.colorScheme.onTertiaryContainer
+                    HomeModule.Pangguai -> MaterialTheme.colorScheme.onSurfaceVariant
                     else -> MaterialTheme.colorScheme.onSurfaceVariant
                 }
                 MyHubEntryCard(
@@ -908,6 +1011,7 @@ private fun FeatureHubScreen(
                         HomeModule.SmartDorm -> onSmartDorm
                         HomeModule.Ilife -> onIlife
                         HomeModule.Ujing -> onUjing
+                        HomeModule.Pangguai -> onPangguai
                         else -> ({})
                     },
                 )
@@ -946,41 +1050,51 @@ private fun ModuleFeatureCard(
         HomeModule.SmartDorm -> if (darkTheme) MaterialTheme.colorScheme.primary else Color(0xFF25735F)
         HomeModule.Ilife -> if (darkTheme) Color(0xFF8AB4F8) else Color(0xFF315F9C)
         HomeModule.Ujing -> if (darkTheme) Color(0xFFC7A7FF) else Color(0xFF6E4AB0)
+        HomeModule.Pangguai -> if (darkTheme) Color(0xFF78D8CE) else Color(0xFF087E76)
         HomeModule.QuickUnlock -> MaterialTheme.colorScheme.primary
         HomeModule.QuickWater -> MaterialTheme.colorScheme.secondary
         HomeModule.UjingScanner -> MaterialTheme.colorScheme.tertiary
+        HomeModule.PangguaiScanner -> MaterialTheme.colorScheme.secondary
     }
     val container = when (module) {
         HomeModule.SmartDorm -> if (darkTheme) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFE7F5F0)
         HomeModule.Ilife -> if (darkTheme) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFE8EEFB)
         HomeModule.Ujing -> if (darkTheme) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFF2ECFF)
+        HomeModule.Pangguai -> MaterialTheme.colorScheme.surfaceVariant
         HomeModule.QuickUnlock -> MaterialTheme.colorScheme.surfaceVariant
         HomeModule.QuickWater -> MaterialTheme.colorScheme.surfaceVariant
         HomeModule.UjingScanner -> MaterialTheme.colorScheme.surfaceVariant
+        HomeModule.PangguaiScanner -> MaterialTheme.colorScheme.surfaceVariant
     }
     val title = when (module) {
         HomeModule.SmartDorm -> "智能宿舍"
         HomeModule.Ilife -> "慧生活"
         HomeModule.Ujing -> "U净"
+        HomeModule.Pangguai -> "胖乖生活"
         HomeModule.QuickUnlock -> "一键开门"
         HomeModule.QuickWater -> "一键接水"
         HomeModule.UjingScanner -> "U净扫一扫"
+        HomeModule.PangguaiScanner -> "扫一扫"
     }
     val subtitle = when (module) {
         HomeModule.SmartDorm -> "门锁 · 饮水"
         HomeModule.Ilife -> "钱包 · 积分 · 账单"
         HomeModule.Ujing -> "洗衣 · 洗鞋 · 烘干"
+        HomeModule.Pangguai -> "扫码洗护 · 历史订单"
         HomeModule.QuickUnlock -> "快速开门"
         HomeModule.QuickWater -> "默认饮水机"
         HomeModule.UjingScanner -> "扫描机身二维码"
+        HomeModule.PangguaiScanner -> "扫描胖乖设备"
     }
     val onClick: () -> Unit = when (module) {
         HomeModule.SmartDorm -> ({ onSmartDorm() })
         HomeModule.Ilife -> ({ onIlife() })
         HomeModule.Ujing -> ({})
+        HomeModule.Pangguai -> ({})
         HomeModule.QuickUnlock -> ({ onSmartDorm() })
         HomeModule.QuickWater -> ({ onIlife() })
         HomeModule.UjingScanner -> ({})
+        HomeModule.PangguaiScanner -> ({})
     }
     FeatureCard(
         modifier = modifier,
@@ -991,9 +1105,11 @@ private fun ModuleFeatureCard(
                 HomeModule.SmartDorm -> SmartDormGlyph(color)
                 HomeModule.Ilife -> IlifeGlyph(color)
                 HomeModule.Ujing -> UjingGlyph(color)
+                HomeModule.Pangguai -> ScannerGlyph(color)
                 HomeModule.QuickUnlock -> SmartDormGlyph(color)
                 HomeModule.QuickWater -> WaterDropGlyph(color)
                 HomeModule.UjingScanner -> ScannerGlyph(color)
+                HomeModule.PangguaiScanner -> ScannerGlyph(color)
             }
         },
         title = title,
@@ -1349,41 +1465,39 @@ private fun HomeQuickWaterButton(
 
     if (showPicker) {
         val devices = account?.rememberedDevices().orEmpty()
-        AlertDialog(
-            onDismissRequest = { showPicker = false },
-            title = { Text("更改默认饮水机", fontWeight = FontWeight.Bold) },
-            text = {
-                if (devices.isEmpty()) {
-                    Text("还没有饮水机，请先在慧生活设备页点击“+”添加。")
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        devices.forEach { id ->
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .clickable {
-                                        account.selectDevice(id)
-                                        AccountStore.updateCurrent(context, account)
-                                        revision++
-                                        showPicker = false
-                                    }
-                                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                RadioButton(selected = id == deviceId, onClick = null)
-                                Text(
-                                    account.deviceDisplayName(id),
-                                    Modifier.weight(1f),
-                                    fontWeight = FontWeight.Medium,
-                                )
-                            }
+        GlassPickerDialog(
+            title = "更改默认饮水机",
+            onDismiss = { showPicker = false },
+        ) {
+            if (devices.isEmpty()) {
+                Text("还没有饮水机，请先在慧生活设备页点击“+”添加。")
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    devices.forEach { id ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .clickable {
+                                    account.selectDevice(id)
+                                    AccountStore.updateCurrent(context, account)
+                                    revision++
+                                    showPicker = false
+                                }
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = id == deviceId, onClick = null)
+                            Text(
+                                account.deviceDisplayName(id),
+                                Modifier.weight(1f),
+                                fontWeight = FontWeight.Medium,
+                            )
                         }
                     }
                 }
-            },
-            confirmButton = { TextButton(onClick = { showPicker = false }) { Text("关闭") } },
-        )
+            }
+        }
     }
 }
 
@@ -1394,47 +1508,100 @@ private fun LockDefaultDialog(
     onDismiss: () -> Unit,
     onSelect: (String) -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("更改默认门锁", fontWeight = FontWeight.Bold) },
-        text = {
-            if (locks.isEmpty()) {
-                Text("还没有门锁凭证，请先进入“智能宿舍”添加。")
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        "首页开锁圆钮将使用选中的门锁。",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp,
-                    )
-                    locks.forEach { lock ->
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(14.dp))
-                                .clickable { onSelect(lock.address) }
-                                .padding(horizontal = 10.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            RadioButton(
-                                selected = lock.address == selectedAddress,
-                                onClick = null,
+    GlassPickerDialog(
+        title = "更改默认门锁",
+        onDismiss = onDismiss,
+    ) {
+        if (locks.isEmpty()) {
+            Text("还没有门锁凭证，请先进入“智能宿舍”添加。")
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "首页开锁圆钮将使用选中的门锁。",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                )
+                locks.forEach { lock ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { onSelect(lock.address) }
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(
+                            selected = lock.address == selectedAddress,
+                            onClick = null,
+                        )
+                        Column(Modifier.weight(1f)) {
+                            Text(lock.name, fontWeight = FontWeight.Medium)
+                            Text(
+                                maskAddress(lock.address),
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            Column(Modifier.weight(1f)) {
-                                Text(lock.name, fontWeight = FontWeight.Medium)
-                                Text(
-                                    maskAddress(lock.address),
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
                         }
                     }
                 }
             }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } },
-    )
+        }
+    }
+}
+
+@Composable
+private fun GlassPickerDialog(
+    title: String,
+    onDismiss: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
+        ),
+    ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.3f))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismiss,
+                )
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp, vertical = 24.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            LiquidGlassPanel(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) {},
+                shape = RoundedCornerShape(28.dp),
+                contentPadding = PaddingValues(20.dp),
+            ) {
+                Column(
+                    Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    content()
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        TextButton(onClick = onDismiss) { Text("关闭") }
+                    }
+                }
+            }
+        }
+    }
 }
 
 private fun maskAddress(address: String): String =
@@ -1897,12 +2064,14 @@ private fun MyHubScreen(
     onTmall: () -> Unit,
     onIlife: () -> Unit,
     onUjing: () -> Unit,
+    onPangguai: () -> Unit,
 ) {
     Column(
         Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 18.dp),
+            .statusBarsPadding()
+            .padding(top = 88.dp, start = 20.dp, end = 20.dp, bottom = 18.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         HubPageHeader(
@@ -1933,6 +2102,14 @@ private fun MyHubScreen(
             container = MaterialTheme.colorScheme.tertiaryContainer,
             contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
             onClick = onUjing,
+        )
+        MyHubEntryCard(
+            title = "胖乖生活",
+            subtitle = "扫码洗护、最近设备与历史订单",
+            badge = "胖",
+            container = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            onClick = onPangguai,
         )
 
         Text(

@@ -67,7 +67,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.AlertDialog
 import com.water.widget.ui.CatalogLiquidButton as Button
-import androidx.compose.material3.Card
+import com.water.widget.ui.HuishengGlassCard as Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import com.water.widget.ui.CatalogLiquidIconButton as IconButton
@@ -76,7 +76,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import com.water.widget.ui.CatalogLiquidOutlinedButton as OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
+import com.water.widget.ui.HuishengGlassSurface as Surface
 import androidx.compose.material3.Text
 import com.water.widget.ui.CatalogLiquidTextButton as TextButton
 import androidx.compose.runtime.Composable

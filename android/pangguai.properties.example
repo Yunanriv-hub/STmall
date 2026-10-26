@@ -1,0 +1,2 @@
+# Local protocol configuration. Never commit the real value.
+APP_SECRET=

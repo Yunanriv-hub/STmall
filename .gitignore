@@ -13,6 +13,7 @@ android/local.properties
 # Signing material - never publish
 android/keystore.properties
 android/life798.properties
+android/pangguai.properties
 *.jks
 *.keystore
 *.p12

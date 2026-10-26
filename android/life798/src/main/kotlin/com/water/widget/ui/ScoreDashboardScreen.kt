@@ -19,7 +19,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material3.Card
+import com.water.widget.ui.HuishengGlassCard as Card
 import androidx.compose.material3.CardDefaults
 import com.water.widget.ui.CatalogLiquidFilterChip as FilterChip
 import com.water.widget.ui.CatalogLiquidTextButton as TextButton

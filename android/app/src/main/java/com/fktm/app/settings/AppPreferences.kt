@@ -62,6 +62,8 @@ class AppPreferences(context: Context) {
                 .putBoolean(KEY_ADDED_QUICK_WATER, true)
                 .putBoolean(KEY_ADDED_UJING, true)
                 .putBoolean(KEY_ADDED_UJING_SCAN, true)
+                .putBoolean(KEY_ADDED_PANGGUAI, true)
+                .putBoolean(KEY_ADDED_PANGGUAI_SCAN, true)
                 .apply()
             return DEFAULT_HOME_MODULES
         }
@@ -79,6 +81,8 @@ class AppPreferences(context: Context) {
         addOnce(KEY_ADDED_QUICK_WATER, MODULE_QUICK_WATER)
         addOnce(KEY_ADDED_UJING, MODULE_UJING)
         addOnce(KEY_ADDED_UJING_SCAN, MODULE_UJING_SCAN)
+        addOnce(KEY_ADDED_PANGGUAI, MODULE_PANGGUAI)
+        addOnce(KEY_ADDED_PANGGUAI_SCAN, MODULE_PANGGUAI_SCAN)
         if (changed) {
             prefs.edit().putStringSet(KEY_ENABLED_HOME_MODULES, migrated).apply()
         }
@@ -94,6 +98,8 @@ class AppPreferences(context: Context) {
             .putBoolean(KEY_ADDED_QUICK_WATER, true)
             .putBoolean(KEY_ADDED_UJING, true)
             .putBoolean(KEY_ADDED_UJING_SCAN, true)
+            .putBoolean(KEY_ADDED_PANGGUAI, true)
+            .putBoolean(KEY_ADDED_PANGGUAI_SCAN, true)
             .apply()
     }
 
@@ -104,6 +110,8 @@ class AppPreferences(context: Context) {
             .putBoolean(KEY_ADDED_QUICK_WATER, true)
             .putBoolean(KEY_ADDED_UJING, true)
             .putBoolean(KEY_ADDED_UJING_SCAN, true)
+            .putBoolean(KEY_ADDED_PANGGUAI, true)
+            .putBoolean(KEY_ADDED_PANGGUAI_SCAN, true)
             .apply()
     }
 
@@ -114,6 +122,8 @@ class AppPreferences(context: Context) {
             .putBoolean(KEY_ADDED_QUICK_WATER, true)
             .putBoolean(KEY_ADDED_UJING, true)
             .putBoolean(KEY_ADDED_UJING_SCAN, true)
+            .putBoolean(KEY_ADDED_PANGGUAI, true)
+            .putBoolean(KEY_ADDED_PANGGUAI_SCAN, true)
             .apply()
     }
 
@@ -124,6 +134,8 @@ class AppPreferences(context: Context) {
         const val MODULE_QUICK_WATER = "quick_water"
         const val MODULE_UJING = "ujing"
         const val MODULE_UJING_SCAN = "ujing_scan"
+        const val MODULE_PANGGUAI = "pangguai"
+        const val MODULE_PANGGUAI_SCAN = "pangguai_scan"
 
         private const val LEGACY_MODULE_SCANNER = "scanner"
         private const val LEGACY_MODULE_NFC = "nfc"
@@ -136,6 +148,8 @@ class AppPreferences(context: Context) {
             MODULE_QUICK_WATER,
             MODULE_UJING,
             MODULE_UJING_SCAN,
+            MODULE_PANGGUAI,
+            MODULE_PANGGUAI_SCAN,
         )
 
         private const val PREFS = "campus_lite_appearance"
@@ -146,6 +160,8 @@ class AppPreferences(context: Context) {
         private const val KEY_ADDED_QUICK_WATER = "added_quick_water"
         private const val KEY_ADDED_UJING = "added_ujing"
         private const val KEY_ADDED_UJING_SCAN = "added_ujing_scan"
+        private const val KEY_ADDED_PANGGUAI = "added_pangguai"
+        private const val KEY_ADDED_PANGGUAI_SCAN = "added_pangguai_scan"
         private const val KEY_UJING_AUTO_REFRESH = "ujing_auto_refresh"
         private const val KEY_UJING_FREE_ONLY = "ujing_free_only"
         private const val KEY_UJING_SORT_MODE = "ujing_sort_mode"
