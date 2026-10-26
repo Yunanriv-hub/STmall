@@ -1,6 +1,7 @@
 package com.fktm.app.scan
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -14,6 +15,9 @@ class DeviceScanActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_RESULT = "com.fktm.app.scan.EXTRA_RESULT"
+
+        fun intent(context: Context): Intent =
+            Intent(context, DeviceScanActivity::class.java)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

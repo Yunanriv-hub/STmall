@@ -1034,7 +1034,6 @@ internal data class ThemeRevealSpec(
 @Composable
 internal fun ThemeRevealOverlay(
     spec: ThemeRevealSpec,
-    onCovered: () -> Unit,
     onFinished: () -> Unit,
 ) {
     val reveal = remember { Animatable(0f) }
@@ -1044,18 +1043,16 @@ internal fun ThemeRevealOverlay(
 
     LaunchedEffect(spec.id) {
         if (!ValueAnimator.areAnimatorsEnabled()) {
-            onCovered()
             onFinished()
             return@LaunchedEffect
         }
         reveal.animateTo(
             targetValue = 1f,
-            animationSpec = tween(420, easing = FastOutSlowInEasing),
+            animationSpec = tween(360, easing = FastOutSlowInEasing),
         )
-        onCovered()
         fade.animateTo(
             targetValue = 0f,
-            animationSpec = tween(270, easing = FastOutSlowInEasing),
+            animationSpec = tween(160, easing = FastOutSlowInEasing),
         )
         onFinished()
     }

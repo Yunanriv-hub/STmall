@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
-import com.fktm.app.ui.CatalogLiquidButton as Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import com.fktm.app.ui.CatalogLiquidTextButton as TextButton
@@ -160,41 +159,39 @@ fun QrScannerScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Text("需要相机权限才能扫码", fontSize = 15.sp)
-                        Button(onClick = { launcher.launch(Manifest.permission.CAMERA) }) {
-                            Text("授予权限")
-                        }
-                        Button(onClick = onClose) { Text("手动输入") }
+                        Text(
+                            "请在系统权限对话框中允许使用相机",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }
-
-            LiquidGlassHeader(
-                title = "扫一扫",
-                subtitle = "二维码识别",
-                onBack = onClose,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .statusBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-            )
 
             LiquidGlassPanel(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .statusBarsPadding()
-                    .padding(top = 92.dp),
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(50),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                    horizontal = 16.dp,
-                    vertical = 9.dp,
+                    horizontal = 20.dp,
+                    vertical = 10.dp,
                 ),
             ) {
-                Text(
-                    "把二维码放进取景框",
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "扫一扫",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        "把二维码放进取景框",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp,
+                    )
+                }
             }
 
             LiquidGlassPanel(

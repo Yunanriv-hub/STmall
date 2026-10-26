@@ -1,10 +1,10 @@
 {
   "channel": "stable",
-  "versionName": "0.4.1",
-  "versionCode": 22,
+  "versionName": "0.4.2",
+  "versionCode": 23,
   "isReady": false,
   "minVersionCode": 1,
-  "releaseNotes": "STmall 0.4.1：新增首页 U净扫一扫、自定义背景和全设备重命名，修复慧生活入口崩溃、U净返回路径、液态开关居中及主题切换层级。项目继续只通过本地 APK 分发。",
+  "releaseNotes": "STmall 0.4.2：统一扫描页并只保留取消扫码，对齐功能页与我的页模块，优化可打断转场和主题遮罩换色，修复 U净顶部重叠及工具按钮换行。项目继续只通过本地 APK 分发。",
   "releaseUrl": "",
   "assets": []
 }

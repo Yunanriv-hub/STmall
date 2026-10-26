@@ -24,8 +24,8 @@ android {
         applicationId = "com.rea.campuslite"
         minSdk = 26
         targetSdk = 36
-        versionCode = 22
-        versionName = "0.4.1"
+        versionCode = 23
+        versionName = "0.4.2"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -115,7 +115,6 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:1.4.2")
     implementation("androidx.camera:camera-view:1.4.2")
     implementation("com.google.zxing:core:3.5.3")
-    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 

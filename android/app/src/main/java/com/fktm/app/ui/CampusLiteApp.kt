@@ -1,6 +1,7 @@
 package com.fktm.app.ui
 
 import android.animation.ValueAnimator
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
@@ -9,6 +10,7 @@ import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -118,6 +120,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fktm.app.BuildConfig
 import com.fktm.app.FktmApp
 import com.fktm.app.credential.LockCredential
+import com.fktm.app.scan.DeviceScanActivity
 import com.fktm.app.settings.AppPreferences
 import com.fktm.app.settings.ThemeMode
 import com.fktm.app.ujing.ui.MainViewModel as UjingViewModel
@@ -125,8 +128,6 @@ import com.fktm.app.ujing.ui.UjingFeatureScreen
 import com.fktm.app.vm.UnlockViewModel
 import com.fktm.app.vm.UnlockState
 import com.fktm.app.vm.WaterViewModel
-import com.journeyapps.barcodescanner.ScanContract
-import com.journeyapps.barcodescanner.ScanOptions
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.kyant.backdrop.drawBackdrop
@@ -270,16 +271,14 @@ fun CampusLiteApp(
     var showLockPicker by remember { mutableStateOf(false) }
     var themeReveal by remember { mutableStateOf<ThemeRevealSpec?>(null) }
     val ujingVm: UjingViewModel = viewModel()
-    val homeUjingScanOptions = remember {
-        ScanOptions().apply {
-            setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-            setPrompt("对准 U净设备机身上的二维码")
-            setBeepEnabled(false)
-            setOrientationLocked(true)
-        }
-    }
-    val homeUjingScanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
-        val raw = result.contents?.takeIf(String::isNotBlank) ?: return@rememberLauncherForActivityResult
+    val homeUjingScanLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
+        val raw = result.data
+            ?.getStringExtra(DeviceScanActivity.EXTRA_RESULT)
+            ?.takeIf(String::isNotBlank)
+            ?: return@rememberLauncherForActivityResult
         ujingVm.onScan(raw)
         ujingOrigin = CampusPage.Home
         page = CampusPage.Ujing
@@ -382,11 +381,6 @@ fun CampusLiteApp(
                     themeReveal?.let { spec ->
                         ThemeRevealOverlay(
                             spec = spec,
-                            onCovered = {
-                                onThemeModeChange(
-                                    if (spec.targetDark) ThemeMode.DARK else ThemeMode.LIGHT
-                                )
-                            },
                             onFinished = { themeReveal = null },
                         )
                     }
@@ -405,7 +399,7 @@ fun CampusLiteApp(
                                 expandFrom = Alignment.Top,
                             ),
                             exit = shrinkVertically(
-                                animationSpec = tween(0),
+                                animationSpec = tween(180, easing = FastOutSlowInEasing),
                                 shrinkTowards = Alignment.Top,
                             ),
                         ) {
@@ -437,38 +431,28 @@ fun CampusLiteApp(
                                     val animationsEnabled =
                                         ValueAnimator.areAnimatorsEnabled()
                                     if (animationsEnabled && initialState != targetState) {
-                                        val movingForward =
-                                            targetState.depth >= initialState.depth
                                         val isTopLevelSwitch =
                                             initialState.depth == 0 && targetState.depth == 0
+                                        val movingForward = if (isTopLevelSwitch) {
+                                            when {
+                                                initialState == CampusPage.Home -> true
+                                                targetState == CampusPage.Home -> false
+                                                initialState == CampusPage.Features -> true
+                                                else -> false
+                                            }
+                                        } else {
+                                            targetState.depth > initialState.depth
+                                        }
                                         val direction = if (movingForward) 1 else -1
-                                        val enterDuration = if (isTopLevelSwitch) 300 else 380
-                                        val exitDuration = if (isTopLevelSwitch) 240 else 300
-                                        val enterSpec = tween<Float>(enterDuration, easing = FastOutSlowInEasing)
-                                        val exitSpec = tween<Float>(exitDuration, easing = FastOutSlowInEasing)
-                                        val enterOffsetSpec =
-                                            tween<IntOffset>(enterDuration, easing = FastOutSlowInEasing)
-                                        val exitOffsetSpec =
-                                            tween<IntOffset>(exitDuration, easing = FastOutSlowInEasing)
-                                        (
-                                            slideInHorizontally(enterOffsetSpec) {
-                                                if (isTopLevelSwitch) 0 else it * direction / 5
-                                            } +
-                                                scaleIn(
-                                                    animationSpec = enterSpec,
-                                                    initialScale = if (isTopLevelSwitch) 0.97f else 0.94f,
-                                                ) +
-                                                fadeIn(enterSpec)
-                                        ) togetherWith (
-                                            slideOutHorizontally(exitOffsetSpec) {
-                                                if (isTopLevelSwitch) 0 else -it * direction / 12
-                                            } +
-                                                scaleOut(
-                                                    animationSpec = exitSpec,
-                                                    targetScale = if (isTopLevelSwitch) 1.02f else 0.98f,
-                                                ) +
-                                                fadeOut(exitSpec)
+                                        val offsetSpec = spring<IntOffset>(
+                                            dampingRatio = 0.9f,
+                                            stiffness = 460f,
                                         )
+                                        slideInHorizontally(offsetSpec) {
+                                            it * direction
+                                        } togetherWith slideOutHorizontally(offsetSpec) {
+                                            -it * direction
+                                        }
                                     } else {
                                         fadeIn(tween(if (animationsEnabled) 180 else 0)) togetherWith
                                             fadeOut(tween(if (animationsEnabled) 120 else 0))
@@ -493,7 +477,9 @@ fun CampusLiteApp(
                     unlockState = lockVm.state,
                     onQuickUnlock = onQuickUnlock,
                     onOpenSettings = { openSettings(CampusPage.Home) },
-                    onUjingScan = { homeUjingScanLauncher.launch(homeUjingScanOptions) },
+                    onUjingScan = {
+                        homeUjingScanLauncher.launch(DeviceScanActivity.intent(context))
+                    },
                     enabledModules = enabledModules,
                     darkTheme = darkTheme,
                 )
@@ -593,9 +579,9 @@ fun CampusLiteApp(
                     animationSpec = tween(260, easing = FastOutSlowInEasing),
                     initialScale = 0.9f,
                 ),
-                exit = fadeOut(tween(0)) + scaleOut(
-                    animationSpec = tween(0),
-                    targetScale = 0.9f,
+                exit = fadeOut(tween(140, easing = FastOutSlowInEasing)) + scaleOut(
+                    animationSpec = tween(180, easing = FastOutSlowInEasing),
+                    targetScale = 0.94f,
                 ),
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -613,10 +599,14 @@ fun CampusLiteApp(
                         enabled = themeReveal == null,
                         onThemeToggle = { center ->
                             if (themeReveal == null) {
+                                val targetDark = !darkTheme
+                                onThemeModeChange(
+                                    if (targetDark) ThemeMode.DARK else ThemeMode.LIGHT
+                                )
                                 themeReveal = ThemeRevealSpec(
                                     id = System.nanoTime(),
                                     center = center,
-                                    targetDark = !darkTheme,
+                                    targetDark = targetDark,
                                 )
                             }
                         },
@@ -857,13 +847,10 @@ private fun FeatureHubScreen(
             .padding(horizontal = 20.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Text("功能", fontSize = 30.sp, fontWeight = FontWeight.Bold)
-        Text(
-            "校园服务集中入口",
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        HubPageHeader(
+            title = "功能",
+            subtitle = "校园服务集中入口",
         )
-        Spacer(Modifier.height(4.dp))
 
         if (modules.isEmpty()) {
             Card(
@@ -927,6 +914,21 @@ private fun FeatureHubScreen(
             }
         }
         Spacer(Modifier.height(12.dp))
+    }
+}
+
+@Composable
+private fun HubPageHeader(
+    title: String,
+    subtitle: String,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(title, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+        Text(
+            subtitle,
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -1901,16 +1903,12 @@ private fun MyHubScreen(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Column {
-            Text("我的", fontSize = 28.sp, fontWeight = FontWeight.Bold)
-            Text(
-                "选择要进入的账号与服务",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        HubPageHeader(
+            title = "我的",
+            subtitle = "选择要进入的账号与服务",
+        )
 
         MyHubEntryCard(
             title = "天猫校园",
@@ -2054,6 +2052,7 @@ private fun MyHubEntryCard(
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .height(108.dp)
             .then(surfaceModifier)
             .clickable(
                 interactionSource = interaction,
@@ -2102,12 +2101,21 @@ private fun MyHubEntryCard(
                 )
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text(title, fontSize = 19.sp, fontWeight = FontWeight.Bold, color = contentColor)
+                Text(
+                    title,
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = contentColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 Text(
                     subtitle,
                     fontSize = 12.sp,
                     lineHeight = 18.sp,
                     color = contentColor.copy(alpha = 0.88f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
             Text("›", fontSize = 28.sp, color = contentColor.copy(alpha = 0.72f))

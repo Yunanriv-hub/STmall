@@ -1,6 +1,5 @@
 package com.fktm.app
 
-import android.graphics.Color as AndroidColor
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -8,12 +7,16 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.core.view.WindowCompat
 import com.fktm.app.ble.BleLockClient
 import com.fktm.app.ui.CampusLiteApp
@@ -75,9 +78,14 @@ class MainActivity : ComponentActivity() {
             var themeMode by remember { mutableStateOf(app.preferences.themeMode) }
             var glassEnabled by remember { mutableStateOf(app.preferences.liquidGlassEnabled) }
             val darkTheme = resolveDarkTheme(themeMode, isSystemInDarkTheme())
+            val systemBarColor by animateColorAsState(
+                targetValue = if (darkTheme) Color.Black else Color(0xFFF5F7F5),
+                animationSpec = tween(360),
+                label = "system-bar-color",
+            )
 
             SideEffect {
-                val barColor = if (darkTheme) AndroidColor.BLACK else AndroidColor.rgb(245, 247, 245)
+                val barColor = systemBarColor.toArgb()
                 window.statusBarColor = barColor
                 window.navigationBarColor = barColor
                 WindowCompat.getInsetsController(window, window.decorView).apply {

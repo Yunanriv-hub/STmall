@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fktm.app.FktmApp
 import com.fktm.app.R
+import com.fktm.app.scan.DeviceScanActivity
 import com.fktm.app.ui.CatalogLiquidButton as Button
 import com.fktm.app.ui.CatalogLiquidFilterChip
 import com.fktm.app.ui.CatalogLiquidIconButton as IconButton
@@ -69,8 +70,6 @@ import com.fktm.app.ujing.net.ScanResult
 import com.fktm.app.ujing.net.WasherDeviceType
 import com.fktm.app.ujing.net.WasherStatus
 import com.fktm.app.ujing.pay.AlipayLauncher
-import com.journeyapps.barcodescanner.ScanContract
-import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -128,17 +127,16 @@ fun UjingFeatureScreen(
         }
     }
 
-    val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
-        result.contents?.let(vm::onScan)
+    val scanLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
+        result.data
+            ?.getStringExtra(DeviceScanActivity.EXTRA_RESULT)
+            ?.takeIf(String::isNotBlank)
+            ?.let(vm::onScan)
     }
-    val scanOptions = remember {
-        ScanOptions().apply {
-            setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-            setPrompt("对准 U净洗衣机机身上的二维码")
-            setBeepEnabled(false)
-            setOrientationLocked(true)
-        }
-    }
+    val launchScan = { scanLauncher.launch(DeviceScanActivity.intent(context)) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
@@ -207,7 +205,7 @@ fun UjingFeatureScreen(
             UjingHeader(
                 loggedIn = loggedIn,
                 onBack = onBack,
-                onScan = { scanLauncher.launch(scanOptions) },
+                onScan = launchScan,
                 onManualAdd = { showManualAdd = true },
                 onRefresh = {
                     vm.refreshAll()
@@ -249,7 +247,7 @@ fun UjingFeatureScreen(
                     },
                     onRename = { renameDevice = it },
                     onDelete = { deleteDevice = it },
-                    onAdd = { scanLauncher.launch(scanOptions) },
+                    onAdd = launchScan,
                 )
                 ActiveDeviceSection(vm, onShowRaw = { showRaw = true })
                 OrdersSection(vm)
@@ -361,39 +359,44 @@ private fun UjingHeader(
         shape = RoundedCornerShape(24.dp),
         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
     ) {
-        Row(
+        Column(
             Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            TextButton(onClick = onBack) { Text("‹ 返回") }
-            Column(Modifier.weight(1f)) {
-                Text("U净", fontSize = 21.sp, fontWeight = FontWeight.Bold)
-                Text(
-                    "洗衣 · 洗鞋 · 烘干",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                TextButton(onClick = onBack) { Text("‹ 返回") }
+                Column(Modifier.weight(1f)) {
+                    Text("U净", fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        "洗衣 · 洗鞋 · 烘干",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (loggedIn) {
+                    IconButton(onClick = onRefresh) {
+                        Icon(Icons.Default.Refresh, contentDescription = "刷新 U净")
+                    }
+                    TextButton(onClick = onScan) { Text("扫码") }
+                }
             }
             if (loggedIn) {
-                IconButton(onClick = onRefresh) {
-                    Icon(Icons.Default.Refresh, contentDescription = "刷新 U净")
-                }
-                TextButton(onClick = onScan) { Text("扫码") }
-            }
-        }
-        if (loggedIn) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                TextButton(onClick = onManualAdd, modifier = Modifier.weight(1f)) {
-                    Text("手动输入")
-                }
-                TextButton(onClick = onLogout, modifier = Modifier.weight(1f)) {
-                    Text("退出账号")
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    TextButton(onClick = onManualAdd, modifier = Modifier.weight(1f)) {
+                        Text("手动输入")
+                    }
+                    TextButton(onClick = onLogout, modifier = Modifier.weight(1f)) {
+                        Text("退出账号")
+                    }
                 }
             }
         }
@@ -808,15 +811,18 @@ private fun ToolsSection(
                     onCheckedChange = onAutoRefreshChange,
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onRefresh, modifier = Modifier.weight(1f)) {
+            Column(
+                Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(onClick = onRefresh, modifier = Modifier.fillMaxWidth()) {
                     Text("全部刷新")
                 }
-                OutlinedButton(onClick = onExport, modifier = Modifier.weight(1f)) {
-                    Text("导出设备")
-                }
-                OutlinedButton(onClick = onImport, modifier = Modifier.weight(1f)) {
+                OutlinedButton(onClick = onImport, modifier = Modifier.fillMaxWidth()) {
                     Text("导入设备")
+                }
+                OutlinedButton(onClick = onExport, modifier = Modifier.fillMaxWidth()) {
+                    Text("导出设备")
                 }
             }
             Text(
