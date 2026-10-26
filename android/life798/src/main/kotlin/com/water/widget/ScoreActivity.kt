@@ -11,6 +11,7 @@ import com.water.widget.ui.ScoreUiState
 import com.water.widget.ui.ScoreUiStateFactory
 import com.water.widget.ui.WaterBillUiStateFactory
 import com.water.widget.ui.WaterTheme
+import com.water.widget.ui.HuishengLiquidGlassHost
 
 /** 按账号展示积分明细与接水消费；列表展示时加载支付金额与明细。 */
 class ScoreActivity : ComponentActivity() {
@@ -23,14 +24,16 @@ class ScoreActivity : ComponentActivity() {
         UI.applySystemBarAppearance(this, ThemeSettings.isDark(this))
         setContent {
             WaterTheme(mode = ThemeSettings.mode(this)) {
-                ScoreDashboardScreen(
-                    states = states,
-                    refreshing = states.any { it.scoreLoading || it.billLoading },
-                    onRefresh = ::refreshScores,
-                    onLoadBill = ::loadBill,
-                    onBack = ::finish,
-                    onLoadMoreBills = ::loadMoreBills
-                )
+                HuishengLiquidGlassHost(GlassPreferences.isEnabled(this)) {
+                    ScoreDashboardScreen(
+                        states = states,
+                        refreshing = states.any { it.scoreLoading || it.billLoading },
+                        onRefresh = ::refreshScores,
+                        onLoadBill = ::loadBill,
+                        onBack = ::finish,
+                        onLoadMoreBills = ::loadMoreBills
+                    )
+                }
             }
         }
         refreshScores()

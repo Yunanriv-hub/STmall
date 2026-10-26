@@ -14,9 +14,8 @@ import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.water.widget.ui.CatalogLiquidTextButton as TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -83,7 +82,7 @@ internal fun WaterUsageSettingsDialog(
                 Row(Modifier.toggleable(value = visible, role = Role.Switch, onValueChange = { visible = it }),
                     verticalAlignment = Alignment.CenterVertically) {
                     Text("显示预估水量", Modifier.weight(1f))
-                    Switch(checked = visible, onCheckedChange = null)
+                    CatalogLiquidSwitch(checked = visible, onCheckedChange = {})
                 }
                 Text("金额与水量的换算比例", style = MaterialTheme.typography.titleSmall)
                 OutlinedTextField(

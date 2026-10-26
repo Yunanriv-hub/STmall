@@ -43,19 +43,18 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
+import com.fktm.app.ui.CatalogLiquidButton as Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
+import com.fktm.app.ui.CatalogLiquidFilterChip as FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import com.fktm.app.ui.CatalogLiquidOutlinedButton as OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.fktm.app.ui.CatalogLiquidTextButton as TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -81,8 +80,10 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -741,12 +742,8 @@ private fun QuickUnlockCircle(
     val working = state is UnlockState.Working
     val hasCredential = credential != null
     val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val pressScale by animateFloatAsState(
-        targetValue = if (pressed) 0.955f else 1f,
-        animationSpec = spring(stiffness = 620f, dampingRatio = 0.66f),
-        label = "quick-unlock-glass-press",
-    )
+    val catalogInteraction = rememberCatalogGlassInteraction()
+    val haptic = LocalHapticFeedback.current
     val title = when {
         working -> "开门中"
         state is UnlockState.Success -> "已开门"
@@ -809,8 +806,10 @@ private fun QuickUnlockCircle(
                 )
             },
             layerBlock = {
-                scaleX = pressScale
-                scaleY = pressScale
+                catalogPressTransform(
+                    catalogInteraction,
+                    1f + 4.dp.toPx() / size.height.coerceAtLeast(1f),
+                )
             },
             onDrawSurface = {
                 drawRect(containerTopColor.copy(alpha = if (darkTheme) 0.14f else 0.12f))
@@ -836,8 +835,10 @@ private fun QuickUnlockCircle(
     } else if (glassEnabled) {
         Modifier
             .graphicsLayer {
-                scaleX = pressScale
-                scaleY = pressScale
+                catalogPressTransform(
+                    catalogInteraction,
+                    1f + 4.dp.toPx() / size.height.coerceAtLeast(1f),
+                )
             }
             .clip(CircleShape)
             .background(
@@ -853,8 +854,7 @@ private fun QuickUnlockCircle(
     } else {
         Modifier
             .graphicsLayer {
-                scaleX = pressScale
-                scaleY = pressScale
+                catalogPressTransform(catalogInteraction, 1.04f)
             }
             .clip(CircleShape)
             .background(
@@ -878,11 +878,16 @@ private fun QuickUnlockCircle(
                     indication = null,
                     onClickLabel = if (hasCredential) "开锁" else "设置钥匙",
                     onLongClickLabel = "更改默认门锁",
-                    onLongClick = onChangeDefaultLock,
+                    onLongClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onChangeDefaultLock()
+                    },
                     onClick = {
                     if (hasCredential) onUnlock() else onManageLock()
                     },
                 )
+                .then(catalogInteraction.modifier)
+                .then(catalogInteraction.gestureModifier)
                 .padding(if (dense) 10.dp else 18.dp),
             contentAlignment = Alignment.Center,
         ) {
@@ -930,12 +935,8 @@ private fun HomeQuickWaterButton(
 ) {
     val context = LocalContext.current
     val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.955f else 1f,
-        animationSpec = spring(stiffness = 620f, dampingRatio = 0.66f),
-        label = "home-quick-water-press",
-    )
+    val catalogInteraction = rememberCatalogGlassInteraction()
+    val haptic = LocalHapticFeedback.current
     var revision by remember { mutableIntStateOf(0) }
     var showPicker by remember { mutableStateOf(false) }
     val account = remember(revision) { AccountStore.getCurrent(context) }
@@ -965,8 +966,7 @@ private fun HomeQuickWaterButton(
             Modifier
                 .size(circleSize)
                 .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
+                    catalogPressTransform(catalogInteraction, 1.04f)
                 }
                 .semantics {
                     contentDescription = "一键接水"
@@ -976,7 +976,10 @@ private fun HomeQuickWaterButton(
                     indication = null,
                     onClickLabel = "启动默认饮水机",
                     onLongClickLabel = "更改默认饮水机",
-                    onLongClick = { showPicker = true },
+                    onLongClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        showPicker = true
+                    },
                     onClick = {
                         if (deviceId.isBlank()) {
                             onManage()
@@ -996,7 +999,8 @@ private fun HomeQuickWaterButton(
                             }
                         }
                     },
-                ),
+                )
+                .then(catalogInteraction.gestureModifier),
         ) {
             LiquidGlassPanel(
                 modifier = Modifier.fillMaxSize(),
@@ -1029,6 +1033,7 @@ private fun HomeQuickWaterButton(
                     )
                 }
             }
+            Box(Modifier.matchParentSize().then(catalogInteraction.modifier))
         }
         if (!dense) {
             Text(
@@ -1147,12 +1152,7 @@ private fun FeatureCard(
     dense: Boolean,
 ) {
     val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.975f else 1f,
-        animationSpec = spring(stiffness = 650f, dampingRatio = 0.68f),
-        label = "feature-card-press",
-    )
+    val catalogInteraction = rememberCatalogGlassInteraction()
     val bottomColor = if (darkTheme) {
         lerp(container, Color.Black, 0.18f)
     } else {
@@ -1185,8 +1185,10 @@ private fun FeatureCard(
                 )
             },
             layerBlock = {
-                scaleX = scale
-                scaleY = scale
+                catalogPressTransform(
+                    catalogInteraction,
+                    1f + 4.dp.toPx() / size.height.coerceAtLeast(1f),
+                )
             },
             onDrawSurface = {
                 drawRect(
@@ -1209,8 +1211,10 @@ private fun FeatureCard(
     } else if (glassEnabled) {
         Modifier
             .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
+                catalogPressTransform(
+                    catalogInteraction,
+                    1f + 4.dp.toPx() / size.height.coerceAtLeast(1f),
+                )
             }
             .clip(shape)
             .background(Brush.verticalGradient(listOf(container, bottomColor)))
@@ -1222,8 +1226,10 @@ private fun FeatureCard(
     } else {
         Modifier
             .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
+                catalogPressTransform(
+                    catalogInteraction,
+                    1f + 4.dp.toPx() / size.height.coerceAtLeast(1f),
+                )
             }
             .clip(shape)
             .background(container)
@@ -1237,6 +1243,8 @@ private fun FeatureCard(
                 indication = null,
                 onClick = onClick,
             )
+            .then(catalogInteraction.modifier)
+            .then(catalogInteraction.gestureModifier)
             .padding(if (dense) 10.dp else 18.dp),
     ) {
         if (dense) {
@@ -1614,12 +1622,7 @@ private fun MyHubEntryCard(
     onClick: () -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.975f else 1f,
-        animationSpec = spring(stiffness = 620f, dampingRatio = 0.7f),
-        label = "my-hub-card-press",
-    )
+    val catalogInteraction = rememberCatalogGlassInteraction()
     val shape = RoundedCornerShape(24.dp)
     val surfaceColor = MaterialTheme.colorScheme.surface
     val backdrop = LocalLiquidGlassBackdrop.current
@@ -1648,8 +1651,10 @@ private fun MyHubEntryCard(
                 )
             },
             layerBlock = {
-                scaleX = scale
-                scaleY = scale
+                catalogPressTransform(
+                    catalogInteraction,
+                    1f + 4.dp.toPx() / size.height.coerceAtLeast(1f),
+                )
             },
             onDrawSurface = {
                 drawRect(
@@ -1673,8 +1678,10 @@ private fun MyHubEntryCard(
     } else if (glassEnabled) {
         Modifier
             .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
+                catalogPressTransform(
+                    catalogInteraction,
+                    1f + 4.dp.toPx() / size.height.coerceAtLeast(1f),
+                )
             }
             .shadow(
                 elevation = 16.dp,
@@ -1701,8 +1708,10 @@ private fun MyHubEntryCard(
     } else {
         Modifier
             .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
+                catalogPressTransform(
+                    catalogInteraction,
+                    1f + 4.dp.toPx() / size.height.coerceAtLeast(1f),
+                )
             }
             .clip(shape)
             .background(container)
@@ -1715,7 +1724,9 @@ private fun MyHubEntryCard(
                 interactionSource = interaction,
                 indication = null,
                 onClick = onClick,
-            ),
+            )
+            .then(catalogInteraction.modifier)
+            .then(catalogInteraction.gestureModifier),
     ) {
         Canvas(Modifier.matchParentSize()) {
             drawRect(
@@ -1845,6 +1856,8 @@ private fun IlifeProfileScreen(
             themeMode = libraryTheme,
             onOpenAppearance = onOpenAppearance,
             modifier = Modifier.weight(1f),
+            liquidGlassBackdrop = LocalLiquidGlassBackdrop.current,
+            liquidGlassEnabled = LocalLiquidGlassEnabled.current,
         )
     }
 }
@@ -2048,7 +2061,7 @@ private fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Switch(
+                CatalogLiquidSwitch(
                     checked = glassEnabled,
                     onCheckedChange = onGlassEnabledChange,
                 )
@@ -2192,7 +2205,7 @@ private fun ModuleToggleRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Switch(
+        CatalogLiquidSwitch(
             checked = checked,
             onCheckedChange = onCheckedChange,
         )

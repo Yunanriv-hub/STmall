@@ -17,18 +17,17 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
+import com.fktm.app.ui.CatalogLiquidButton as Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import com.fktm.app.ui.CatalogLiquidOutlinedButton as OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.Switch
+import com.fktm.app.ui.CatalogLiquidTextButton as TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -48,6 +47,7 @@ import com.fktm.app.ui.LiquidGlassHeader
 import com.fktm.app.ui.LiquidGlassPanel
 import com.fktm.app.ui.LocalLiquidGlassBackdrop
 import com.fktm.app.ui.LocalLiquidGlassEnabled
+import com.fktm.app.ui.CatalogLiquidSwitch
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.water.widget.GlassPreferences
@@ -227,7 +227,7 @@ fun NfcTagScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Switch(
+                CatalogLiquidSwitch(
                     checked = autoStartEnabled,
                     onCheckedChange = onAutoStartChange,
                 )

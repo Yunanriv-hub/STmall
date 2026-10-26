@@ -15,18 +15,17 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material3.Button
+import com.water.widget.ui.CatalogLiquidButton as Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
+import com.water.widget.ui.CatalogLiquidFilterChip as FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.water.widget.ui.CatalogLiquidTextButton as TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -148,7 +147,7 @@ fun TaskScreen(
                         selected = onlyFailures,
                         onClick = { onlyFailures = !onlyFailures },
                         label = { Text("仅看失败", fontSize = 12.sp) },
-                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = MaterialTheme.colorScheme.errorContainer)
+                        selectedContainerColor = MaterialTheme.colorScheme.errorContainer
                     )
                 }
             }

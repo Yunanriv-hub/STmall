@@ -66,19 +66,19 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import com.water.widget.ui.CatalogLiquidButton as Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import com.water.widget.ui.CatalogLiquidIconButton as IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import com.water.widget.ui.CatalogLiquidOutlinedButton as OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.water.widget.ui.CatalogLiquidTextButton as TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -196,7 +196,9 @@ fun DashboardScreen(
     var showDefaultWaterPicker by rememberSaveable { mutableStateOf(false) }
 
     CompositionLocalProvider(
-        LocalContentColor provides colors.onBackground
+        LocalContentColor provides colors.onBackground,
+        LocalHuishengGlassBackdrop provides glassBackdrop,
+        LocalHuishengGlassEnabled provides glassEnabled,
     ) {
     Box(modifier = modifier.fillMaxSize()) {
         Box(
@@ -390,7 +392,6 @@ fun DashboardScreen(
             }
         }
     }
-    }
 
     if (showAccountSwitcher) {
         AccountSwitcherDialog(
@@ -468,6 +469,7 @@ fun DashboardScreen(
             taskRiskConfirmed = true
             showTaskRiskDialog = false
         })
+    }
     }
 }
 
@@ -938,31 +940,38 @@ fun HuishengMineContent(
     onWallet: () -> Unit,
     themeMode: AppThemeMode,
     onOpenAppearance: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    liquidGlassBackdrop: LayerBackdrop? = null,
+    liquidGlassEnabled: Boolean = true,
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+    CompositionLocalProvider(
+        LocalHuishengGlassBackdrop provides liquidGlassBackdrop,
+        LocalHuishengGlassEnabled provides liquidGlassEnabled,
     ) {
-        MineTab(
-            state = state,
-            onLogin = onLogin,
-            onAccounts = onAccounts,
-            onScores = onScores,
-            onWallet = onWallet,
-            themeMode = themeMode,
-            onOpenAppearanceSettings = onOpenAppearance,
-            onOpenSupport = {},
-            updateStatus = "随 STmall 一起更新",
-            autoUpdateLabel = "由 STmall 管理",
-            onCheckUpdate = {},
-            onUpdateSettings = {},
-            onProject = {},
-            showHostMeta = false
-        )
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            MineTab(
+                state = state,
+                onLogin = onLogin,
+                onAccounts = onAccounts,
+                onScores = onScores,
+                onWallet = onWallet,
+                themeMode = themeMode,
+                onOpenAppearanceSettings = onOpenAppearance,
+                onOpenSupport = {},
+                updateStatus = "随 STmall 一起更新",
+                autoUpdateLabel = "由 STmall 管理",
+                onCheckUpdate = {},
+                onUpdateSettings = {},
+                onProject = {},
+                showHostMeta = false
+            )
+        }
     }
 }
 

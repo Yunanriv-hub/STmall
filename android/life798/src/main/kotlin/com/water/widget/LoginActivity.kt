@@ -11,6 +11,7 @@ import androidx.activity.compose.setContent
 import com.water.widget.ui.LoginPlatform
 import com.water.widget.ui.LoginScreen
 import com.water.widget.ui.LoginUiStateFactory
+import com.water.widget.ui.HuishengLiquidGlassHost
 import com.water.widget.ui.WaterTheme
 import org.json.JSONObject
 
@@ -48,7 +49,8 @@ class LoginActivity : ComponentActivity() {
     private fun render() {
         setContent {
             WaterTheme(mode = ThemeSettings.mode(this)) {
-                LoginScreen(
+                HuishengLiquidGlassHost(GlassPreferences.isEnabled(this)) {
+                    LoginScreen(
                     state = LoginUiStateFactory.from(platform, captchaBitmap != null, smsSent, phone, graphCode, smsCode),
                     phone = phone,
                     graphCode = graphCode,
@@ -63,7 +65,8 @@ class LoginActivity : ComponentActivity() {
                     onSendSms = { sendSms() },
                     onLogin = { doLogin() },
                     onBack = { finish() }
-                )
+                    )
+                }
             }
         }
     }

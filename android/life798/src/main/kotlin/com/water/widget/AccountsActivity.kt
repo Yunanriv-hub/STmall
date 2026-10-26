@@ -13,7 +13,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.water.widget.ui.CatalogLiquidTextButton as TextButton
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -22,6 +22,7 @@ import com.water.widget.ui.AccountCardState
 import com.water.widget.ui.AccountsScreen
 import com.water.widget.ui.TextEntryDialog
 import com.water.widget.ui.WaterTheme
+import com.water.widget.ui.HuishengLiquidGlassHost
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.launch
@@ -39,23 +40,25 @@ class AccountsActivity : ComponentActivity() {
         refresh()
         setContent {
             WaterTheme(mode = ThemeSettings.mode(this)) {
-                val login = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-                    if (it.resultCode == RESULT_OK) toast("登录已保存；同一手机号的两项状态会显示在同一账户中")
-                    refresh()
+                HuishengLiquidGlassHost(GlassPreferences.isEnabled(this)) {
+                    val login = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+                        if (it.resultCode == RESULT_OK) toast("登录已保存；同一手机号的两项状态会显示在同一账户中")
+                        refresh()
+                    }
+                    AccountsScreen(
+                        accounts = accounts,
+                        onSmsLogin = { login.launch(Intent(this, LoginActivity::class.java)) },
+                        onAddToken = { dialog = DialogState.AddToken },
+                        onSetCurrent = { AccountStore.setCurrent(this, it); refresh(); toast("已切换当前账户") },
+                        onSetAppToken = { phone -> dialog = DialogState.SetAppToken(phone) },
+                        onRevealToken = { phone, app -> dialog = DialogState.Reveal(phone, app) },
+                        onDelete = { phone -> dialog = DialogState.Delete(phone) },
+                        onCheckLogin = { phone -> AccountStore.get(this, phone)?.let(::checkLogins) },
+                        onRelogin = { phone, app -> login.launch(LoginActivity.reloginIntent(this, phone, app)) },
+                        onBack = { finish() }
+                    )
+                    RenderDialog()
                 }
-                AccountsScreen(
-                    accounts = accounts,
-                    onSmsLogin = { login.launch(Intent(this, LoginActivity::class.java)) },
-                    onAddToken = { dialog = DialogState.AddToken },
-                    onSetCurrent = { AccountStore.setCurrent(this, it); refresh(); toast("已切换当前账户") },
-                    onSetAppToken = { phone -> dialog = DialogState.SetAppToken(phone) },
-                    onRevealToken = { phone, app -> dialog = DialogState.Reveal(phone, app) },
-                    onDelete = { phone -> dialog = DialogState.Delete(phone) },
-                    onCheckLogin = { phone -> AccountStore.get(this, phone)?.let(::checkLogins) },
-                    onRelogin = { phone, app -> login.launch(LoginActivity.reloginIntent(this, phone, app)) },
-                    onBack = { finish() }
-                )
-                RenderDialog()
             }
         }
         lifecycleScope.launch { LoginStatusStore.changes.collect { refresh() } }

@@ -27,21 +27,21 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.AccountBalanceWallet
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import com.water.widget.ui.CatalogLiquidButton as Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
+import com.water.widget.ui.CatalogLiquidFilterChip as FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import com.water.widget.ui.CatalogLiquidIconButton as IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import com.water.widget.ui.CatalogLiquidOutlinedButton as OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.water.widget.ui.CatalogLiquidTextButton as TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -67,6 +67,7 @@ import com.water.widget.ui.PullRefreshOffsetContent
 import com.water.widget.ui.WaterPullRefresh
 import com.water.widget.ui.WaterShapeTokens
 import com.water.widget.ui.WaterTheme
+import com.water.widget.ui.HuishengLiquidGlassHost
 import java.util.Locale
 import java.security.MessageDigest
 
@@ -477,30 +478,32 @@ class WalletActivity : ComponentActivity() {
     private fun render() {
         setContent {
             WaterTheme(mode = ThemeSettings.mode(this)) {
-                WalletScreen(
-                    state = state,
-                    onBack = ::finish,
-                    onOpenAccounts = { startActivity(Intent(this, AccountsActivity::class.java)) },
-                    onRefresh = { loadWallets() },
-                    onSelectWallet = ::selectWallet,
-                    onSelectProduct = { product ->
-                        state = state.copy(selectedProductId = product.id, statusMessage = null)
-                    },
-                    onRequestRecharge = {
-                        state = state.copy(showRechargeConfirmation = true)
-                    },
-                    onDismissRecharge = {
-                        state = state.copy(showRechargeConfirmation = false)
-                    },
-                    onRequestExchange = { score -> state = state.copy(exchangeScore = score) },
-                    onDismissExchange = { state = state.copy(exchangeScore = null) },
-                    onConfirmExchange = ::startExchange,
-                    onConfirmRecharge = {
-                        state = state.copy(showRechargeConfirmation = false)
-                        startRecharge()
-                    },
-                    onCheckRecharge = ::checkRecharge
-                )
+                HuishengLiquidGlassHost(GlassPreferences.isEnabled(this)) {
+                    WalletScreen(
+                        state = state,
+                        onBack = ::finish,
+                        onOpenAccounts = { startActivity(Intent(this, AccountsActivity::class.java)) },
+                        onRefresh = { loadWallets() },
+                        onSelectWallet = ::selectWallet,
+                        onSelectProduct = { product ->
+                            state = state.copy(selectedProductId = product.id, statusMessage = null)
+                        },
+                        onRequestRecharge = {
+                            state = state.copy(showRechargeConfirmation = true)
+                        },
+                        onDismissRecharge = {
+                            state = state.copy(showRechargeConfirmation = false)
+                        },
+                        onRequestExchange = { score -> state = state.copy(exchangeScore = score) },
+                        onDismissExchange = { state = state.copy(exchangeScore = null) },
+                        onConfirmExchange = ::startExchange,
+                        onConfirmRecharge = {
+                            state = state.copy(showRechargeConfirmation = false)
+                            startRecharge()
+                        },
+                        onCheckRecharge = ::checkRecharge
+                    )
+                }
             }
         }
     }

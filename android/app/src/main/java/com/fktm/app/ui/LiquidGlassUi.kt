@@ -38,7 +38,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.fktm.app.ui.CatalogLiquidTextButton as TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -144,16 +144,11 @@ private fun GlassIconButton(
     onClick: (Offset) -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
+    val catalogInteraction = rememberCatalogGlassInteraction()
     val backdrop = LocalLiquidGlassBackdrop.current
     val glassEnabled = LocalLiquidGlassEnabled.current
     val useNativeGlass = glassEnabled &&
         backdrop != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.9f else 1f,
-        animationSpec = spring(stiffness = 650f, dampingRatio = 0.68f),
-        label = "glass-button-scale",
-    )
     var center by remember { mutableStateOf(Offset.Zero) }
     val topColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.68f)
     val bottomColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.34f)
@@ -179,8 +174,10 @@ private fun GlassIconButton(
                 )
             },
             layerBlock = {
-                scaleX = scale
-                scaleY = scale
+                catalogPressTransform(
+                    catalogInteraction,
+                    1f + 4.dp.toPx() / size.height.coerceAtLeast(1f),
+                )
             },
             onDrawSurface = {
                 drawRect(
@@ -204,8 +201,10 @@ private fun GlassIconButton(
     } else if (glassEnabled) {
         Modifier
             .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
+                catalogPressTransform(
+                    catalogInteraction,
+                    1f + 4.dp.toPx() / size.height.coerceAtLeast(1f),
+                )
             }
             .shadow(
                 elevation = 10.dp,
@@ -217,8 +216,10 @@ private fun GlassIconButton(
     } else {
         Modifier
             .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
+                catalogPressTransform(
+                    catalogInteraction,
+                    1f + 4.dp.toPx() / size.height.coerceAtLeast(1f),
+                )
             }
             .clip(CircleShape)
             .background(MaterialTheme.colorScheme.surface)
@@ -251,7 +252,9 @@ private fun GlassIconButton(
                 indication = null,
             ) {
                 onClick(center)
-            },
+            }
+            .then(catalogInteraction.modifier)
+            .then(catalogInteraction.gestureModifier),
         contentAlignment = Alignment.Center,
     ) {
         Box(
@@ -284,6 +287,7 @@ internal fun LiquidGlassBottomBar(
     val profileAccent = if (darkTheme) Color(0xFF8AB4F8) else Color(0xFF356EA8)
     val density = LocalDensity.current
     val animationsEnabled = ValueAnimator.areAnimatorsEnabled()
+    val barInteraction = rememberCatalogGlassInteraction()
     val borderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f)
     val backdrop = LocalLiquidGlassBackdrop.current
     val glassEnabled = LocalLiquidGlassEnabled.current
@@ -360,6 +364,12 @@ internal fun LiquidGlassBottomBar(
                 )
             },
             exportedBackdrop = tabsBackdrop,
+            layerBlock = {
+                catalogPressTransform(
+                    barInteraction,
+                    1f + 16.dp.toPx() / size.width.coerceAtLeast(1f),
+                )
+            },
             onDrawSurface = { drawRect(glassBrush) },
         )
     } else if (glassEnabled) {
@@ -374,10 +384,22 @@ internal fun LiquidGlassBottomBar(
             .clip(shape)
             .background(glassBrush)
             .border(1.dp, borderColor, shape)
+            .graphicsLayer {
+                catalogPressTransform(
+                    barInteraction,
+                    1f + 16.dp.toPx() / size.width.coerceAtLeast(1f),
+                )
+            }
     } else {
         Modifier
             .clip(shape)
             .background(surface)
+            .graphicsLayer {
+                catalogPressTransform(
+                    barInteraction,
+                    1f + 16.dp.toPx() / size.width.coerceAtLeast(1f),
+                )
+            }
     }
 
     Box(
@@ -428,7 +450,9 @@ internal fun LiquidGlassBottomBar(
                                 if (target != selectedIndex) onSelected(target)
                             },
                         )
-                    },
+                    }
+                    .then(barInteraction.modifier)
+                    .then(barInteraction.gestureModifier),
             ) {
                 val tabWidth = maxWidth / 2
                 val indicatorOffset = with(density) {
@@ -564,7 +588,7 @@ private fun GlassTab(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.9f else 1f,
+        targetValue = if (pressed) 1.12f else 1f,
         animationSpec = spring(stiffness = 700f, dampingRatio = 0.62f),
         label = "glass-tab-press",
     )

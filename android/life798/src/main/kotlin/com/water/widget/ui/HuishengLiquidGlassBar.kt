@@ -421,7 +421,7 @@ private fun androidx.compose.foundation.layout.RowScope.LiquidGlassTabButton(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val pressScale by animateFloatAsState(
-        targetValue = if (pressed) 0.92f else 1f,
+        targetValue = if (pressed) 1.12f else 1f,
         animationSpec = if (animationsEnabled) {
             spring(stiffness = 650f, dampingRatio = 0.66f)
         } else {

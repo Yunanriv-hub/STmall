@@ -11,6 +11,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import com.water.widget.ui.CatalogLiquidButton as Button
+import com.water.widget.ui.CatalogLiquidOutlinedButton as OutlinedButton
+import com.water.widget.ui.CatalogLiquidTextButton as TextButton
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
@@ -65,7 +68,7 @@ fun AutoTaskSettings() {
                 Text("每天运行全部账号的签到和积分任务。")
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("自动执行", modifier = Modifier.weight(1f))
-                    Switch(checked = enabled, onCheckedChange = {
+                    CatalogLiquidSwitch(checked = enabled, onCheckedChange = {
                         enabled = it
                         AutoTasks.setEnabled(context, it)
                         if (it) notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
