@@ -33,6 +33,7 @@ class CredentialStore(context: Context) {
         private const val KEY_ALIAS = "fktm_master_key"
         private const val FIELD_CREDENTIALS = "credentials_enc"
         private const val FIELD_IV = "credentials_iv"
+        private const val KEY_DEFAULT_ADDRESS = "default_address"
         private const val ANDROID_KEYSTORE = "AndroidKeyStore"
         private const val GCM_TAG_BITS = 128
     }
@@ -131,8 +132,20 @@ class CredentialStore(context: Context) {
         prefs.edit().putString(FIELD_CREDENTIALS, ct).putString(FIELD_IV, iv).apply()
     }
 
-    /** 主锁（列表第一把）。 */
-    fun primary(): LockCredential? = load().firstOrNull()
+    fun defaultAddress(): String? = prefs.getString(KEY_DEFAULT_ADDRESS, null)
+
+    fun setPrimary(address: String) {
+        if (load().none { it.address.equals(address, ignoreCase = true) }) return
+        prefs.edit().putString(KEY_DEFAULT_ADDRESS, address).apply()
+    }
+
+    /** 用户选择的默认锁；未设置时兼容旧版使用第一把。 */
+    fun primary(): LockCredential? {
+        val list = load()
+        val selected = defaultAddress()
+        return list.firstOrNull { it.address.equals(selected, ignoreCase = true) }
+            ?: list.firstOrNull()
+    }
 
     /** 新增或按 address 覆盖。 */
     fun upsert(cred: LockCredential) {
@@ -143,6 +156,9 @@ class CredentialStore(context: Context) {
 
     fun remove(address: String) {
         persist(load().filterNot { it.address.equals(address, ignoreCase = true) })
+        if (defaultAddress().equals(address, ignoreCase = true)) {
+            prefs.edit().remove(KEY_DEFAULT_ADDRESS).apply()
+        }
     }
 
     fun clear() {

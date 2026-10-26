@@ -1,9 +1,13 @@
 package com.water.widget
 
+import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -37,6 +41,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -70,7 +75,14 @@ class DeviceAddActivity : ComponentActivity() {
             toast("请先登录账户后再添加设备")
             return
         }
-        val normalized = DeviceIdParser.normalize(deviceId)
+        if (isTmallWaterPayload(deviceId)) {
+            toast("这是天猫校园饮水机，请从智能宿舍饮水页添加")
+            return
+        }
+        val normalized = DeviceIdParser.normalizeOrNull(deviceId)
+            ?: DeviceIdParser.normalize(deviceId).takeUnless {
+                it.contains("://") || it.contains('?') || it.contains('=')
+            }.orEmpty()
         if (normalized.isBlank()) {
             toast("请输入有效的设备编号")
             return
@@ -84,6 +96,11 @@ class DeviceAddActivity : ComponentActivity() {
 
     private fun toast(message: String) =
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+
+    private fun isTmallWaterPayload(raw: String): Boolean {
+        val text = raw.lowercase()
+        return "share.confong.cn/xh" in text || Regex("""\btmxy\d{10,20}\b""").containsMatchIn(text)
+    }
 }
 
 @Composable
@@ -92,8 +109,42 @@ internal fun DeviceAddScreen(
     onBack: () -> Unit,
     initialDeviceId: String = ""
 ) {
+    val context = LocalContext.current
     var deviceId by rememberSaveable(initialDeviceId) {
         mutableStateOf(DeviceIdParser.normalize(initialDeviceId))
+    }
+    var payloadError by rememberSaveable { mutableStateOf<String?>(null) }
+    fun acceptPayload(raw: String) {
+        val parsed = DeviceIdParser.normalizeOrNull(raw)
+        if (parsed == null) {
+            payloadError = "未识别到慧生活设备编号"
+            return
+        }
+        if (
+            raw.lowercase().contains("share.confong.cn/xh") ||
+            Regex("""\btmxy\d{10,20}\b""").containsMatchIn(raw.lowercase())
+        ) {
+            payloadError = "识别到天猫校园饮水机，请从智能宿舍饮水页添加"
+            return
+        }
+        deviceId = parsed
+        payloadError = null
+    }
+    val scanLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            result.data?.getStringExtra("com.fktm.app.scan.EXTRA_RESULT")
+                ?.let(::acceptPayload)
+        }
+    }
+    val nfcLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            result.data?.getStringExtra("com.fktm.app.nfc.EXTRA_DEVICE_ID_RESULT")
+                ?.let(::acceptPayload)
+        }
     }
 
     Column(
@@ -114,11 +165,14 @@ internal fun DeviceAddScreen(
                 Text("设备编号", fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
                 OutlinedTextField(
                     value = deviceId,
-                    onValueChange = { deviceId = it },
+                    onValueChange = {
+                        deviceId = it
+                        payloadError = null
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("设备编号 / 二维码内容") },
                     supportingText = {
-                        Text("也可以在 STmall 扫一扫或碰一碰设备贴纸后自动填入")
+                        Text("支持设备贴纸二维码、NFC 标签或手动输入")
                     },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
                     singleLine = true,
@@ -129,6 +183,44 @@ internal fun DeviceAddScreen(
                         unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
                     )
                 )
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            scanLauncher.launch(
+                                Intent().setClassName(
+                                    context.packageName,
+                                    "com.fktm.app.scan.DeviceScanActivity",
+                                )
+                            )
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = WaterShapeTokens.compact,
+                    ) {
+                        Text("扫码识别")
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            nfcLauncher.launch(
+                                Intent()
+                                    .setClassName(
+                                        context.packageName,
+                                        "com.fktm.app.nfc.NfcTagActivity",
+                                    )
+                                    .putExtra("com.fktm.app.nfc.EXTRA_RETURN_DEVICE_ID", true)
+                            )
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = WaterShapeTokens.compact,
+                    ) {
+                        Text("NFC 碰一碰")
+                    }
+                }
+                payloadError?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                }
             }
         }
 
@@ -174,7 +266,7 @@ private fun DeviceAddHero(onBack: () -> Unit) {
                     )
                 }
                 Text(
-                    "添加设备",
+                    "添加慧生活设备",
                     modifier = Modifier.weight(1f),
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
@@ -182,7 +274,7 @@ private fun DeviceAddHero(onBack: () -> Unit) {
                 )
             }
             Text(
-                "填写设备编号，或从 STmall 扫一扫 / NFC 进入",
+                "可从设备贴纸扫码或碰一碰 NFC 自动识别",
                 color = colors.onPrimaryContainer.copy(alpha = 0.78f),
                 fontSize = 13.sp
             )

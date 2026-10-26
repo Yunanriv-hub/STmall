@@ -45,6 +45,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -180,29 +181,6 @@ fun MainScreen(
             UpdateCard(repo = app.updateRepository, settings = app.updateSettings)
         }
 
-        if (vm.logText.isNotBlank()) {
-            Spacer(Modifier.height(18.dp))
-            HorizontalDivider()
-            Spacer(Modifier.height(10.dp))
-            Text("收发时序", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(6.dp))
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    vm.logText,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
-                    lineHeight = 14.sp,
-                    modifier = Modifier.padding(10.dp),
-                )
-            }
-        }
-
         Spacer(Modifier.height(30.dp))
     }
 }
@@ -271,7 +249,7 @@ private fun openInBrowser(context: Context, url: String) {
 @Composable
 private fun ConnectionBadge(ready: Boolean, connecting: Boolean, target: String?) {
     // 目标锁的 MAC 尾两段，让用户一眼确认「连的是我这把」而不是楼里其它 ~vTmallLock
-    val tail = target?.takeLast(5)?.let { " · 本锁 $it" } ?: ""
+    val tail = ""
     val (mark, text, color) = when {
         ready -> Triple("●", "已预连接$tail · 开锁免建连", MaterialTheme.colorScheme.primary)
         connecting -> Triple("◌", "预连接中$tail", MaterialTheme.colorScheme.primary)
@@ -329,7 +307,7 @@ private fun LockCard(
             Text(cred.name, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(4.dp))
             Text(
-                "${cred.address}   钥匙 ${cred.maskedKey()}",
+                "${maskLockAddress(cred.address)} · 钥匙已加密保存",
                 fontSize = 11.sp,
                 fontFamily = FontFamily.Monospace,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
@@ -504,16 +482,18 @@ private fun AutoGrabSection(
             onEnsureNotificationPermission()
             GrabForegroundService.start(context)
             try {
-                var result = ShizukuLogcatGrabber.capture(context)
-                if (
-                    result is ShizukuLogcatGrabber.Result.Failed &&
-                    result.reason.contains("UserService 已断开")
-                ) {
-                    // Vendor ROMs can briefly tear down the binder while the
-                    // foreground service starts. A clean second bind resolves it
-                    // without requiring the user to force-stop the app.
-                    delay(800)
-                    result = ShizukuLogcatGrabber.capture(context)
+                var result: ShizukuLogcatGrabber.Result =
+                    ShizukuLogcatGrabber.Result.Failed("尚未开始")
+                val attempts = intArrayOf(60_000, 90_000, 240_000)
+                for ((index, timeoutMs) in attempts.withIndex()) {
+                    result = ShizukuLogcatGrabber.capture(context, timeoutMs)
+                    if (result is ShizukuLogcatGrabber.Result.Found ||
+                        result is ShizukuLogcatGrabber.Result.PermissionDenied ||
+                        applied
+                    ) {
+                        break
+                    }
+                    if (index != attempts.lastIndex) delay(700)
                 }
                 state = when (val r = result) {
                     is ShizukuLogcatGrabber.Result.Found -> {
@@ -565,7 +545,7 @@ private fun AutoGrabSection(
                     Spacer(Modifier.height(6.dp))
                     Text(
                         "正在后台监听日志 —— 现在去天猫校园点一次开锁，" +
-                            "开完回到本 App 即会自动填入（最多监听 4 分钟）。",
+                            "开完回到本 App 即会自动填入（低性能设备会自动重试）。",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.primary,
                     )
@@ -677,6 +657,7 @@ private fun ImportPanel(
                 value = key,
                 onValueChange = { key = it },
                 label = { Text("activationKey（32 位 hex）") },
+                visualTransformation = PasswordVisualTransformation(),
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -711,6 +692,10 @@ private fun ImportPanel(
         }
     }
 }
+
+private fun maskLockAddress(address: String): String =
+    if (address.length <= 8) "已保存门锁"
+    else "${address.take(5)} ··· ${address.takeLast(5)}"
 
 /** 兼容两种输入：完整的 credentials.json（含 locks 数组），或单个凭证对象。 */
 private fun parsePasted(text: String): LockCredential? {

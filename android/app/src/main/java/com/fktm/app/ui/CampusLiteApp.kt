@@ -8,6 +8,7 @@ import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -21,6 +22,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -42,6 +44,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -81,6 +84,8 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -94,8 +99,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fktm.app.FktmApp
 import com.fktm.app.credential.LockCredential
-import com.fktm.app.nfc.NfcTagActivity
-import com.fktm.app.nfc.NfcTagCodec
 import com.fktm.app.settings.AppPreferences
 import com.fktm.app.settings.ThemeMode
 import com.fktm.app.vm.UnlockViewModel
@@ -110,7 +113,6 @@ import com.kyant.backdrop.effects.vibrancy
 import com.kyant.backdrop.highlight.Highlight
 import com.kyant.backdrop.shadow.Shadow
 import com.water.widget.ConfigActivity
-import com.water.widget.DeviceAddActivity
 import com.water.widget.AccountStore
 import com.water.widget.AccountsActivity
 import com.water.widget.AppThemeMode as HuishengThemeMode
@@ -122,6 +124,8 @@ import com.water.widget.ThemeSettings
 import com.water.widget.TokenValidity
 import com.water.widget.WalletActivity
 import com.water.widget.WalletResponseParser
+import com.water.widget.WaterControlState
+import com.water.widget.WaterService
 import com.water.widget.ui.DashboardViewModel
 import com.water.widget.ui.HuishengMineContent
 import kotlinx.coroutines.delay
@@ -129,7 +133,6 @@ import kotlinx.coroutines.delay
 private enum class CampusPage {
     Home,
     SmartDorm,
-    Scanner,
     MyHub,
     TmallProfile,
     IlifeProfile,
@@ -141,6 +144,18 @@ private fun CampusPage.isMyPage(): Boolean =
         this == CampusPage.TmallProfile ||
         this == CampusPage.IlifeProfile
 
+private val CampusPage.depth: Int
+    get() = when (this) {
+        CampusPage.Home -> 0
+        CampusPage.MyHub -> 1
+        CampusPage.SmartDorm,
+        CampusPage.TmallProfile,
+        CampusPage.IlifeProfile,
+        -> 2
+
+        CampusPage.Settings -> 3
+    }
+
 private enum class HomeModule(
     val key: String,
     val title: String,
@@ -151,25 +166,20 @@ private enum class HomeModule(
         "智能宿舍",
         "门锁、饮水与宿舍服务",
     ),
-    Scanner(
-        AppPreferences.MODULE_SCANNER,
-        "扫一扫",
-        "扫描校园设备二维码",
-    ),
     Ilife(
         AppPreferences.MODULE_ILIFE,
         "慧生活",
         "饮水、钱包、积分与账单",
     ),
-    Nfc(
-        AppPreferences.MODULE_NFC,
-        "NFC 碰一碰",
-        "读取或写入设备标签",
-    ),
     QuickUnlock(
         AppPreferences.MODULE_QUICK_UNLOCK,
         "一键开门",
         "首页圆形蓝牙开锁按钮",
+    ),
+    QuickWater(
+        AppPreferences.MODULE_QUICK_WATER,
+        "一键接水",
+        "首页圆形慧生活接水按钮",
     ),
 }
 
@@ -187,15 +197,19 @@ fun CampusLiteApp(
     onQuickUnlock: () -> Unit,
     themeMode: ThemeMode,
     darkTheme: Boolean,
+    glassEnabled: Boolean,
     onThemeModeChange: (ThemeMode) -> Unit,
+    onGlassEnabledChange: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
+    val app = context.applicationContext as FktmApp
     val preferences = remember(context.applicationContext) {
-        (context.applicationContext as FktmApp).preferences
+        app.preferences
     }
     var page by rememberSaveable { mutableStateOf(CampusPage.Home) }
     var settingsOrigin by rememberSaveable { mutableStateOf(CampusPage.Home) }
     var dormSection by rememberSaveable { mutableIntStateOf(0) }
+    var showLockPicker by remember { mutableStateOf(false) }
     var themeReveal by remember { mutableStateOf<ThemeRevealSpec?>(null) }
     var enabledModules by remember {
         mutableStateOf(
@@ -252,24 +266,37 @@ fun CampusLiteApp(
     }
 
     val showTopActions = page == CampusPage.Home || page == CampusPage.MyHub
-    val showBottomBar = page != CampusPage.Scanner && page != CampusPage.Settings
+    val showBottomBar = page != CampusPage.Settings
     val glassBackdrop = rememberLayerBackdrop()
     val backgroundBackdrop = rememberLayerBackdrop()
 
-    CompositionLocalProvider(LocalLiquidGlassBackdrop provides glassBackdrop) {
+    CompositionLocalProvider(
+        LocalLiquidGlassBackdrop provides glassBackdrop,
+        LocalLiquidGlassEnabled provides glassEnabled,
+    ) {
         Box(Modifier.fillMaxSize()) {
             Box(
                 Modifier
                     .fillMaxSize()
-                    .layerBackdrop(glassBackdrop)
+                    .then(
+                        if (glassEnabled) Modifier.layerBackdrop(glassBackdrop) else Modifier
+                    )
             ) {
                 Box(
                     Modifier
                         .fillMaxSize()
-                        .layerBackdrop(backgroundBackdrop)
+                            .then(
+                                if (glassEnabled) {
+                                    Modifier.layerBackdrop(backgroundBackdrop)
+                                } else {
+                                    Modifier
+                                }
+                            )
                         .background(MaterialTheme.colorScheme.background)
                 ) {
-                    LiquidGlassAmbientBackground(darkTheme)
+                    if (glassEnabled) {
+                        LiquidGlassAmbientBackground(darkTheme)
+                    }
                 }
                 CompositionLocalProvider(
                     LocalLiquidGlassBackdrop provides backgroundBackdrop
@@ -308,14 +335,9 @@ fun CampusLiteApp(
                                 transitionSpec = {
                                     val animationsEnabled =
                                         ValueAnimator.areAnimatorsEnabled()
-                                    val initialIsTab = initialState == CampusPage.Home ||
-                                        initialState == CampusPage.MyHub
-                                    val targetIsTab = targetState == CampusPage.Home ||
-                                        targetState == CampusPage.MyHub
-                                    if (animationsEnabled && initialIsTab && targetIsTab &&
-                                        initialState != targetState
-                                    ) {
-                                        val direction = if (targetState == CampusPage.MyHub) 1 else -1
+                                    if (animationsEnabled && initialState != targetState) {
+                                        val direction =
+                                            if (targetState.depth >= initialState.depth) 1 else -1
                                         (
                                             slideInHorizontally(tween(360)) {
                                                 it * direction / 2
@@ -338,7 +360,6 @@ fun CampusLiteApp(
                         dormSection = 0
                         page = CampusPage.SmartDorm
                     },
-                    onScan = { page = CampusPage.Scanner },
                     onIlife = {
                         context.startActivity(
                             Intent(context, ConfigActivity::class.java)
@@ -346,10 +367,9 @@ fun CampusLiteApp(
                                 .putExtra(ConfigActivity.EXTRA_THEME_MODE, themeMode.storedValue)
                         )
                     },
-                    onNfc = {
-                        context.startActivity(Intent(context, NfcTagActivity::class.java))
-                    },
-                    credential = lockVm.locks.firstOrNull(),
+                    credential = (context.applicationContext as FktmApp)
+                        .credentialStore.primary(),
+                    onChangeDefaultLock = { showLockPicker = true },
                     unlockState = lockVm.state,
                     onQuickUnlock = onQuickUnlock,
                     onOpenSettings = { openSettings(CampusPage.Home) },
@@ -365,24 +385,6 @@ fun CampusLiteApp(
                     waterVm = waterVm,
                     onRequestBlePermissions = onRequestBlePermissions,
                     onEnsureNotificationPermission = onEnsureNotificationPermission,
-                )
-
-                CampusPage.Scanner -> QrScannerScreen(
-                    onDetected = { text ->
-                        val ilifeId = NfcTagCodec.extractDeviceId(text)
-                        if (ilifeId != null && NfcTagCodec.isIlifePayload(text)) {
-                            context.startActivity(
-                                Intent(context, DeviceAddActivity::class.java)
-                                    .putExtra(DeviceAddActivity.EXTRA_DEVICE_ID, ilifeId)
-                            )
-                            page = CampusPage.Home
-                        } else {
-                            waterVm.resolve(context.applicationContext, text)
-                            dormSection = 1
-                            page = CampusPage.SmartDorm
-                        }
-                    },
-                    onClose = { page = CampusPage.Home },
                 )
 
                 CampusPage.MyHub -> MyHubScreen(
@@ -410,6 +412,8 @@ fun CampusLiteApp(
                     themeMode = themeMode,
                     darkTheme = darkTheme,
                     enabledModules = enabledModules,
+                    glassEnabled = glassEnabled,
+                    onGlassEnabledChange = onGlassEnabledChange,
                     onThemeModeChange = onThemeModeChange,
                     onModuleToggle = ::setModuleEnabled,
                     onResetModules = ::resetModules,
@@ -460,6 +464,21 @@ fun CampusLiteApp(
                 )
             }
 
+            if (showLockPicker) {
+                LockDefaultDialog(
+                    locks = lockVm.locks,
+                    selectedAddress = app.credentialStore.defaultAddress()
+                        ?: app.credentialStore.primary()?.address,
+                    onDismiss = { showLockPicker = false },
+                    onSelect = { address ->
+                        app.credentialStore.setPrimary(address)
+                        lockVm.refresh()
+                        lockVm.prewarm()
+                        showLockPicker = false
+                    },
+                )
+            }
+
         themeReveal?.let { spec ->
             ThemeRevealOverlay(
                 spec = spec,
@@ -478,25 +497,23 @@ fun CampusLiteApp(
 @Composable
 private fun CampusHome(
     onSmartDorm: () -> Unit,
-    onScan: () -> Unit,
     onIlife: () -> Unit,
-    onNfc: () -> Unit,
     credential: LockCredential?,
     unlockState: UnlockState,
     onQuickUnlock: () -> Unit,
+    onChangeDefaultLock: () -> Unit,
     onOpenSettings: () -> Unit,
     enabledModules: Set<HomeModule>,
     darkTheme: Boolean,
 ) {
     val quickEnabled = HomeModule.QuickUnlock in enabledModules
+    val quickWaterEnabled = HomeModule.QuickWater in enabledModules
     val cardModules = listOf(
         HomeModule.SmartDorm,
-        HomeModule.Scanner,
         HomeModule.Ilife,
-        HomeModule.Nfc,
     )
         .filter { it in enabledModules }
-    val onlyQuickUnlock = quickEnabled && cardModules.isEmpty()
+    val onlyQuickActions = cardModules.isEmpty() && (quickEnabled || quickWaterEnabled)
 
     BoxWithConstraints(
         Modifier
@@ -512,7 +529,7 @@ private fun CampusHome(
             ),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            if (onlyQuickUnlock) {
+            if (onlyQuickActions) {
                 Spacer(Modifier.weight(1.15f))
             }
             if (enabledModules.isEmpty()) {
@@ -567,9 +584,7 @@ private fun CampusHome(
                                     height = cardHeight,
                                     darkTheme = darkTheme,
                                     onSmartDorm = onSmartDorm,
-                                    onScan = onScan,
                                     onIlife = onIlife,
-                                    onNfc = onNfc,
                                     dense = dense || cardModules.size > 1,
                                 )
                             }
@@ -580,21 +595,39 @@ private fun CampusHome(
                     }
                 }
 
-                if (quickEnabled) {
+                if (quickEnabled || quickWaterEnabled) {
                     Spacer(Modifier.height(if (cardModules.isEmpty()) 8.dp else if (dense) 10.dp else 16.dp))
-                    QuickUnlockCircle(
-                        credential = credential,
-                        state = unlockState,
-                        onUnlock = onQuickUnlock,
-                        onManageLock = onSmartDorm,
-                        compact = compact,
-                        darkTheme = darkTheme,
-                        dense = dense,
-                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(
+                            if (dense) 10.dp else 16.dp
+                        ),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        if (quickEnabled) {
+                            QuickUnlockCircle(
+                                credential = credential,
+                                state = unlockState,
+                                onUnlock = onQuickUnlock,
+                                onManageLock = onSmartDorm,
+                                onChangeDefaultLock = onChangeDefaultLock,
+                                compact = compact,
+                                darkTheme = darkTheme,
+                                dense = dense,
+                            )
+                        }
+                        if (quickWaterEnabled) {
+                            HomeQuickWaterButton(
+                                compact = compact,
+                                darkTheme = darkTheme,
+                                dense = dense,
+                                onManage = onIlife,
+                            )
+                        }
+                    }
                 }
             }
 
-            Spacer(Modifier.weight(if (onlyQuickUnlock) 0.55f else 1f))
+            Spacer(Modifier.weight(if (onlyQuickActions) 0.55f else 1f))
             Text(
                 "无广告 · 凭证本地加密 · 仅连接必要服务",
                 fontSize = if (compact) 10.sp else 11.sp,
@@ -612,45 +645,38 @@ private fun ModuleFeatureCard(
     height: Dp,
     darkTheme: Boolean,
     onSmartDorm: () -> Unit,
-    onScan: () -> Unit,
     onIlife: () -> Unit,
-    onNfc: () -> Unit,
     dense: Boolean,
 ) {
     val accent = when (module) {
         HomeModule.SmartDorm -> if (darkTheme) MaterialTheme.colorScheme.primary else Color(0xFF25735F)
-        HomeModule.Scanner -> if (darkTheme) MaterialTheme.colorScheme.tertiary else Color(0xFF3C6688)
         HomeModule.Ilife -> if (darkTheme) Color(0xFF8AB4F8) else Color(0xFF315F9C)
-        HomeModule.Nfc -> if (darkTheme) Color(0xFFFFB86B) else Color(0xFF9A5A18)
         HomeModule.QuickUnlock -> MaterialTheme.colorScheme.primary
+        HomeModule.QuickWater -> MaterialTheme.colorScheme.secondary
     }
     val container = when (module) {
         HomeModule.SmartDorm -> if (darkTheme) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFE7F5F0)
-        HomeModule.Scanner -> if (darkTheme) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFEAF1F7)
         HomeModule.Ilife -> if (darkTheme) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFE8EEFB)
-        HomeModule.Nfc -> if (darkTheme) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFF8EEDF)
         HomeModule.QuickUnlock -> MaterialTheme.colorScheme.surfaceVariant
+        HomeModule.QuickWater -> MaterialTheme.colorScheme.surfaceVariant
     }
     val title = when (module) {
         HomeModule.SmartDorm -> "智能宿舍"
-        HomeModule.Scanner -> "扫一扫"
         HomeModule.Ilife -> "慧生活"
-        HomeModule.Nfc -> "NFC 碰一碰"
         HomeModule.QuickUnlock -> "一键开门"
+        HomeModule.QuickWater -> "一键接水"
     }
     val subtitle = when (module) {
         HomeModule.SmartDorm -> "门锁 · 饮水"
-        HomeModule.Scanner -> "扫码服务"
         HomeModule.Ilife -> "钱包 · 积分 · 账单"
-        HomeModule.Nfc -> "读写设备标签"
         HomeModule.QuickUnlock -> "快速开门"
+        HomeModule.QuickWater -> "默认饮水机"
     }
     val onClick = when (module) {
         HomeModule.SmartDorm -> onSmartDorm
-        HomeModule.Scanner -> onScan
         HomeModule.Ilife -> onIlife
-        HomeModule.Nfc -> onNfc
         HomeModule.QuickUnlock -> onSmartDorm
+        HomeModule.QuickWater -> onIlife
     }
     FeatureCard(
         modifier = modifier,
@@ -659,10 +685,9 @@ private fun ModuleFeatureCard(
         icon = { color ->
             when (module) {
                 HomeModule.SmartDorm -> SmartDormGlyph(color)
-                HomeModule.Scanner -> ScannerGlyph(color)
                 HomeModule.Ilife -> IlifeGlyph(color)
-                HomeModule.Nfc -> NfcGlyph(color)
                 HomeModule.QuickUnlock -> SmartDormGlyph(color)
+                HomeModule.QuickWater -> WaterDropGlyph(color)
             }
         },
         title = title,
@@ -701,12 +726,14 @@ private fun EmptyHomeState(onOpenSettings: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun QuickUnlockCircle(
     credential: LockCredential?,
     state: UnlockState,
     onUnlock: () -> Unit,
     onManageLock: () -> Unit,
+    onChangeDefaultLock: () -> Unit,
     compact: Boolean,
     darkTheme: Boolean,
     dense: Boolean,
@@ -757,7 +784,9 @@ private fun QuickUnlockCircle(
         else -> credential.name
     }
     val backdrop = LocalLiquidGlassBackdrop.current
-    val useNativeGlass = backdrop != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val glassEnabled = LocalLiquidGlassEnabled.current
+    val useNativeGlass = glassEnabled &&
+        backdrop != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val surfaceModifier = if (useNativeGlass) {
         Modifier.drawBackdrop(
             backdrop = backdrop!!,
@@ -804,7 +833,7 @@ private fun QuickUnlockCircle(
                 )
             },
         )
-    } else {
+    } else if (glassEnabled) {
         Modifier
             .graphicsLayer {
                 scaleX = pressScale
@@ -821,6 +850,18 @@ private fun QuickUnlockCircle(
                 MaterialTheme.colorScheme.onSurface.copy(alpha = 0.16f),
                 CircleShape,
             )
+    } else {
+        Modifier
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            }
+            .clip(CircleShape)
+            .background(
+                Brush.radialGradient(
+                    listOf(containerTopColor, containerBottomColor),
+                )
+            )
     }
 
     Column(
@@ -831,13 +872,17 @@ private fun QuickUnlockCircle(
             Modifier
                 .size(if (dense) 96.dp else if (compact) 132.dp else 154.dp)
                 .then(surfaceModifier)
-                .clickable(
+                .combinedClickable(
                     enabled = !working,
                     interactionSource = interaction,
                     indication = null,
-                ) {
+                    onClickLabel = if (hasCredential) "开锁" else "设置钥匙",
+                    onLongClickLabel = "更改默认门锁",
+                    onLongClick = onChangeDefaultLock,
+                    onClick = {
                     if (hasCredential) onUnlock() else onManageLock()
-                }
+                    },
+                )
                 .padding(if (dense) 10.dp else 18.dp),
             contentAlignment = Alignment.Center,
         ) {
@@ -875,6 +920,219 @@ private fun QuickUnlockCircle(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun HomeQuickWaterButton(
+    compact: Boolean,
+    darkTheme: Boolean,
+    dense: Boolean,
+    onManage: () -> Unit,
+) {
+    val context = LocalContext.current
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.955f else 1f,
+        animationSpec = spring(stiffness = 620f, dampingRatio = 0.66f),
+        label = "home-quick-water-press",
+    )
+    var revision by remember { mutableIntStateOf(0) }
+    var showPicker by remember { mutableStateOf(false) }
+    val account = remember(revision) { AccountStore.getCurrent(context) }
+    val deviceId = account?.selectedDeviceId().orEmpty()
+    val deviceName = account?.deviceDisplayName(deviceId).orEmpty()
+    val control by WaterControlState.state.collectAsStateWithLifecycle()
+    val controlState = control
+    val starting = controlState?.deviceId == deviceId && controlState.starting
+    val running = controlState?.deviceId == deviceId && !controlState.starting
+    val title = when {
+        starting -> "启动中"
+        running -> "接水中"
+        else -> "一键接水"
+    }
+    val subtitle = when {
+        deviceId.isBlank() -> "点此配置设备"
+        starting -> "正在连接饮水机"
+        running -> "点击物理按键接水"
+        else -> deviceName
+    }
+    val circleSize = if (dense) 96.dp else if (compact) 132.dp else 154.dp
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(if (dense) 4.dp else 7.dp),
+    ) {
+        Box(
+            Modifier
+                .size(circleSize)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }
+                .semantics {
+                    contentDescription = "一键接水"
+                }
+                .combinedClickable(
+                    interactionSource = interaction,
+                    indication = null,
+                    onClickLabel = "启动默认饮水机",
+                    onLongClickLabel = "更改默认饮水机",
+                    onLongClick = { showPicker = true },
+                    onClick = {
+                        if (deviceId.isBlank()) {
+                            onManage()
+                        } else {
+                            when (
+                                WaterService.start(
+                                    context,
+                                    deviceId,
+                                    android.appwidget.AppWidgetManager.INVALID_APPWIDGET_ID,
+                                )
+                            ) {
+                                WaterService.StartResult.STARTED -> Unit
+                                WaterService.StartResult.ALREADY_RUNNING ->
+                                    Toast.makeText(context, "饮水机已在运行", Toast.LENGTH_SHORT).show()
+                                WaterService.StartResult.FAILED ->
+                                    Toast.makeText(context, "启动失败，请检查登录与设备", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    },
+                ),
+        ) {
+            LiquidGlassPanel(
+                modifier = Modifier.fillMaxSize(),
+                shape = CircleShape,
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    if (dense) 10.dp else 18.dp
+                ),
+            ) {
+                Column(
+                    Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    WaterDropGlyph(
+                        if (darkTheme) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.secondary,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        title,
+                        fontSize = if (dense) 15.sp else if (compact) 18.sp else 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                    )
+                    Text(
+                        subtitle,
+                        fontSize = if (dense) 7.sp else if (compact) 8.sp else 9.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+        if (!dense) {
+            Text(
+                "点击直接接水 · 长按换设备",
+                fontSize = 10.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+
+    if (showPicker) {
+        val devices = account?.rememberedDevices().orEmpty()
+        AlertDialog(
+            onDismissRequest = { showPicker = false },
+            title = { Text("更改默认饮水机", fontWeight = FontWeight.Bold) },
+            text = {
+                if (devices.isEmpty()) {
+                    Text("还没有饮水机，请先在慧生活设备页点击“+”添加。")
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        devices.forEach { id ->
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .clickable {
+                                        account.selectDevice(id)
+                                        AccountStore.updateCurrent(context, account)
+                                        revision++
+                                        showPicker = false
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(selected = id == deviceId, onClick = null)
+                                Text(
+                                    account.deviceDisplayName(id),
+                                    Modifier.weight(1f),
+                                    fontWeight = FontWeight.Medium,
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showPicker = false }) { Text("关闭") } },
+        )
+    }
+}
+
+@Composable
+private fun LockDefaultDialog(
+    locks: List<LockCredential>,
+    selectedAddress: String?,
+    onDismiss: () -> Unit,
+    onSelect: (String) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("更改默认门锁", fontWeight = FontWeight.Bold) },
+        text = {
+            if (locks.isEmpty()) {
+                Text("还没有门锁凭证，请先进入“智能宿舍”添加。")
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "首页开锁圆钮将使用选中的门锁。",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                    )
+                    locks.forEach { lock ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .clickable { onSelect(lock.address) }
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = lock.address == selectedAddress,
+                                onClick = null,
+                            )
+                            Column(Modifier.weight(1f)) {
+                                Text(lock.name, fontWeight = FontWeight.Medium)
+                                Text(
+                                    maskAddress(lock.address),
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } },
+    )
+}
+
+private fun maskAddress(address: String): String =
+    if (address.length <= 8) "已保存门锁"
+    else "${address.take(4)} ··· ${address.takeLast(4)}"
+
 @Composable
 private fun FeatureCard(
     modifier: Modifier,
@@ -902,7 +1160,9 @@ private fun FeatureCard(
     }
     val shape = RoundedCornerShape(if (dense) 20.dp else 28.dp)
     val backdrop = LocalLiquidGlassBackdrop.current
-    val useNativeGlass = backdrop != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val glassEnabled = LocalLiquidGlassEnabled.current
+    val useNativeGlass = glassEnabled &&
+        backdrop != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val surfaceModifier = if (useNativeGlass) {
         Modifier.drawBackdrop(
             backdrop = backdrop!!,
@@ -946,7 +1206,7 @@ private fun FeatureCard(
                 )
             },
         )
-    } else {
+    } else if (glassEnabled) {
         Modifier
             .graphicsLayer {
                 scaleX = scale
@@ -959,6 +1219,14 @@ private fun FeatureCard(
                 MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f),
                 shape,
             )
+    } else {
+        Modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(shape)
+            .background(container)
     }
     Box(
         modifier
@@ -1162,6 +1430,63 @@ private fun IlifeGlyph(color: Color) {
 }
 
 @Composable
+private fun WaterDropGlyph(color: Color) {
+    Canvas(Modifier.size(32.dp)) {
+        val stroke = Stroke(
+            width = 2.dp.toPx(),
+            cap = StrokeCap.Round,
+            join = StrokeJoin.Round,
+        )
+        val drop = Path().apply {
+            moveTo(size.width * 0.5f, size.height * 0.12f)
+            cubicTo(
+                size.width * 0.24f,
+                size.height * 0.42f,
+                size.width * 0.18f,
+                size.height * 0.58f,
+                size.width * 0.18f,
+                size.height * 0.7f,
+            )
+            cubicTo(
+                size.width * 0.18f,
+                size.height * 0.88f,
+                size.width * 0.33f,
+                size.height * 0.94f,
+                size.width * 0.5f,
+                size.height * 0.94f,
+            )
+            cubicTo(
+                size.width * 0.67f,
+                size.height * 0.94f,
+                size.width * 0.82f,
+                size.height * 0.88f,
+                size.width * 0.82f,
+                size.height * 0.7f,
+            )
+            cubicTo(
+                size.width * 0.82f,
+                size.height * 0.58f,
+                size.width * 0.76f,
+                size.height * 0.42f,
+                size.width * 0.5f,
+                size.height * 0.12f,
+            )
+            close()
+        }
+        drawPath(drop, color, style = stroke)
+        drawArc(
+            color = color.copy(alpha = 0.78f),
+            startAngle = 200f,
+            sweepAngle = 140f,
+            useCenter = false,
+            topLeft = Offset(size.width * 0.3f, size.height * 0.56f),
+            size = Size(size.width * 0.4f, size.height * 0.22f),
+            style = stroke,
+        )
+    }
+}
+
+@Composable
 private fun NfcGlyph(color: Color) {
     Canvas(Modifier.size(32.dp)) {
         val stroke = Stroke(width = 2.1.dp.toPx(), cap = StrokeCap.Round)
@@ -1298,7 +1623,9 @@ private fun MyHubEntryCard(
     val shape = RoundedCornerShape(24.dp)
     val surfaceColor = MaterialTheme.colorScheme.surface
     val backdrop = LocalLiquidGlassBackdrop.current
-    val useNativeGlass = backdrop != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val glassEnabled = LocalLiquidGlassEnabled.current
+    val useNativeGlass = glassEnabled &&
+        backdrop != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val surfaceModifier = if (useNativeGlass) {
         Modifier.drawBackdrop(
             backdrop = backdrop!!,
@@ -1343,7 +1670,7 @@ private fun MyHubEntryCard(
                 )
             },
         )
-    } else {
+    } else if (glassEnabled) {
         Modifier
             .graphicsLayer {
                 scaleX = scale
@@ -1371,6 +1698,14 @@ private fun MyHubEntryCard(
                 Color.White.copy(alpha = 0.22f),
                 shape,
             )
+    } else {
+        Modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(shape)
+            .background(container)
     }
     Box(
         modifier = Modifier
@@ -1673,21 +2008,13 @@ private fun SettingsScreen(
     themeMode: ThemeMode,
     darkTheme: Boolean,
     enabledModules: Set<HomeModule>,
+    glassEnabled: Boolean,
+    onGlassEnabledChange: (Boolean) -> Unit,
     onThemeModeChange: (ThemeMode) -> Unit,
     onModuleToggle: (HomeModule, Boolean) -> Unit,
     onResetModules: () -> Unit,
     onBack: () -> Unit,
 ) {
-    var lastChangedIndex by remember { mutableIntStateOf(-1) }
-    var pulseKey by remember { mutableIntStateOf(0) }
-
-    LaunchedEffect(pulseKey) {
-        if (lastChangedIndex >= 0) {
-            delay(520)
-            lastChangedIndex = -1
-        }
-    }
-
     Column(
         Modifier
             .fillMaxSize()
@@ -1703,6 +2030,32 @@ private fun SettingsScreen(
         )
 
         SettingsCard(
+            title = "液态玻璃",
+            subtitle = "开启后使用背景模糊、折射和高光；关闭后采用纯色平面。",
+        ) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { onGlassEnabledChange(!glassEnabled) }
+                    .padding(horizontal = 16.dp, vertical = 13.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("液态玻璃特效", fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                    Text(
+                        if (glassEnabled) "已开启" else "已关闭",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = glassEnabled,
+                    onCheckedChange = onGlassEnabledChange,
+                )
+            }
+        }
+
+        SettingsCard(
             title = "首页模块",
             subtitle = "关闭模块后首页会自动重排；隐藏全部模块时会显示设置引导。",
         ) {
@@ -1711,16 +2064,8 @@ private fun SettingsScreen(
                     title = module.title,
                     subtitle = module.description,
                     checked = module in enabledModules,
-                    pulseDistance = if (lastChangedIndex >= 0) {
-                        kotlin.math.abs(index - lastChangedIndex)
-                    } else {
-                        0
-                    },
-                    pulseKey = pulseKey,
                     onCheckedChange = {
                         onModuleToggle(module, it)
-                        lastChangedIndex = index
-                        pulseKey++
                     },
                 )
                 if (index != HomeModule.entries.lastIndex) {
@@ -1830,27 +2175,11 @@ private fun ModuleToggleRow(
     title: String,
     subtitle: String,
     checked: Boolean,
-    pulseDistance: Int,
-    pulseKey: Int,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    val nudge = remember { Animatable(0f) }
-    val density = LocalDensity.current
-    LaunchedEffect(pulseKey) {
-        if (pulseDistance == 1 || pulseDistance == 2) {
-            val amplitude = if (pulseDistance == 1) 3f else 1.5f
-            nudge.snapTo(0f)
-            nudge.animateTo(amplitude, tween(65))
-            nudge.animateTo(-amplitude * 0.68f, tween(65))
-            nudge.animateTo(0f, spring(stiffness = 620f, dampingRatio = 0.7f))
-        }
-    }
     Row(
         Modifier
             .fillMaxWidth()
-            .graphicsLayer {
-                translationX = with(density) { nudge.value.dp.toPx() }
-            }
             .clickable { onCheckedChange(!checked) }
             .padding(horizontal = 16.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically,

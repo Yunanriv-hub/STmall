@@ -23,8 +23,8 @@ android {
         applicationId = "com.rea.campuslite"
         minSdk = 26
         targetSdk = 36
-        versionCode = 19
-        versionName = "0.3.4"
+        versionCode = 20
+        versionName = "0.3.5"
         vectorDrawables { useSupportLibrary = true }
     }
 

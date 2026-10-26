@@ -114,6 +114,7 @@ class ConfigActivity : ComponentActivity() {
                         runWithNotificationPermission { startDevice(deviceId) }
                     },
                     showMineTab = !intent.getBooleanExtra(EXTRA_HIDE_MINE, false),
+                    glassEnabled = GlassPreferences.isEnabled(this),
                     onHostBack = ::finish
                 )
             }

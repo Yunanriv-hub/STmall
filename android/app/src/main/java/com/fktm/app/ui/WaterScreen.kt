@@ -1,5 +1,6 @@
 package com.fktm.app.ui
 
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -40,6 +41,7 @@ import androidx.compose.ui.unit.sp
 import com.fktm.app.vm.WaterViewModel
 import com.fktm.app.water.WaterDevice
 import com.fktm.app.water.WaterDevices
+import com.fktm.app.nfc.NfcTagCodec
 
 /**
  * 校园饮水页：登录态 → 选中设备 → 解锁。
@@ -78,7 +80,15 @@ fun WaterScreen(
         QrScannerScreen(
             onDetected = { text ->
                 showScanner = false
-                vm.resolve(context, text)
+                if (NfcTagCodec.isIlifePayload(text)) {
+                    Toast.makeText(
+                        context,
+                        "这是慧生活设备，请从“慧生活 → 设备 → +”添加",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                } else {
+                    vm.resolve(context, text)
+                }
             },
             onClose = { showScanner = false },
         )

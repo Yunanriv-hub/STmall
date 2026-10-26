@@ -10,6 +10,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.overscroll
 import androidx.compose.foundation.pager.HorizontalPager
@@ -34,6 +35,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -62,6 +64,7 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -158,6 +161,7 @@ fun DashboardScreen(
     onStopDevice: (String) -> Unit = {},
     onOpenSupportLink: (String) -> Unit = LocalUriHandler.current::openUri,
     showMineTab: Boolean = true,
+    glassEnabled: Boolean = true,
     onHostBack: (() -> Unit)? = null
 ) {
     val colors = MaterialTheme.colorScheme
@@ -189,6 +193,7 @@ fun DashboardScreen(
     var showAccountSwitcher by rememberSaveable { mutableStateOf(false) }
     var showAppearanceSettings by rememberSaveable { mutableStateOf(false) }
     var showSupportDialog by rememberSaveable { mutableStateOf(false) }
+    var showDefaultWaterPicker by rememberSaveable { mutableStateOf(false) }
 
     CompositionLocalProvider(
         LocalContentColor provides colors.onBackground
@@ -198,9 +203,11 @@ fun DashboardScreen(
             Modifier
                 .fillMaxSize()
                 .background(colors.background)
-                .layerBackdrop(glassBackdrop)
+                .then(
+                    if (glassEnabled) Modifier.layerBackdrop(glassBackdrop) else Modifier
+                )
         ) {
-            Canvas(Modifier.fillMaxSize()) {
+            if (glassEnabled) Canvas(Modifier.fillMaxSize()) {
                 val primaryAlpha = if (darkTheme) 0.075f else 0.12f
                 val secondaryAlpha = if (darkTheme) 0.055f else 0.09f
                 drawCircle(
@@ -330,8 +337,37 @@ fun DashboardScreen(
                 }
             },
             backdrop = glassBackdrop,
+            glassEnabled = glassEnabled,
             modifier = Modifier.align(Alignment.BottomCenter)
         )
+        val defaultDevice = state.summary.devices.firstOrNull { it.isControlCenterDevice }
+            ?: state.summary.devices.firstOrNull()
+        defaultDevice?.let { device ->
+            Box(
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .navigationBarsPadding()
+                    .padding(end = 20.dp, bottom = 94.dp)
+                    .size(64.dp)
+                    .shadow(14.dp, CircleShape, clip = false)
+                    .clip(CircleShape)
+                    .background(colors.primary)
+                    .combinedClickable(
+                        onClickLabel = "启动默认饮水机",
+                        onLongClickLabel = "更改默认饮水机",
+                        onLongClick = { showDefaultWaterPicker = true },
+                        onClick = { onStartDevice(device.id) },
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Default.WaterDrop,
+                    contentDescription = "启动默认饮水机",
+                    tint = colors.onPrimary,
+                    modifier = Modifier.size(28.dp),
+                )
+            }
+        }
         onHostBack?.let { onBack ->
             Surface(
                 modifier = Modifier
@@ -378,6 +414,53 @@ fun DashboardScreen(
     }
     if (showSupportDialog) {
         SupportDeveloperDialog(onOpenLink = onOpenSupportLink, onDismiss = { showSupportDialog = false })
+    }
+    if (showDefaultWaterPicker) {
+        AlertDialog(
+            onDismissRequest = { showDefaultWaterPicker = false },
+            title = { Text("更改默认饮水机", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(
+                    Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    state.summary.devices.forEach { device ->
+                        Surface(
+                            onClick = {
+                                onSelectDevice(device.id)
+                                showDefaultWaterPicker = false
+                            },
+                            shape = WaterShapeTokens.compact,
+                            color = if (device.isControlCenterDevice) {
+                                colors.primaryContainer
+                            } else {
+                                colors.surfaceVariant
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Row(
+                                Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(device.name, Modifier.weight(1f))
+                                if (device.isControlCenterDevice) {
+                                    Icon(
+                                        Icons.Default.Check,
+                                        contentDescription = "当前默认饮水机",
+                                        tint = colors.primary,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showDefaultWaterPicker = false }) {
+                    Text("关闭")
+                }
+            },
+        )
     }
     if (!taskRiskConfirmed && (tabs.getOrNull(pagerState.settledPage) == DashboardTab.TASK || showTaskRiskDialog)) {
         TaskRiskDialog(onConfirm = {
@@ -1062,6 +1145,7 @@ private fun BottomTabs(
     selectedTab: DashboardTab,
     onSelect: (DashboardTab) -> Unit,
     backdrop: LayerBackdrop? = null,
+    glassEnabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val items = tabs.map { tab ->
@@ -1079,6 +1163,7 @@ private fun BottomTabs(
         selectedIndex = tabs.indexOf(selectedTab).coerceAtLeast(0),
         onSelected = { index -> tabs.getOrNull(index)?.let(onSelect) },
         backdrop = backdrop,
+        glassEnabled = glassEnabled,
         modifier = modifier,
     )
 }

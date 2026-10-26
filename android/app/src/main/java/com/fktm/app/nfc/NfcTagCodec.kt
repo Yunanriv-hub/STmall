@@ -3,7 +3,7 @@ package com.fktm.app.nfc
 import android.net.Uri
 import android.nfc.NdefMessage
 import android.nfc.NdefRecord
-import java.net.URLDecoder
+import com.water.widget.DeviceIdParser
 import java.net.URLEncoder
 
 /**
@@ -12,11 +12,6 @@ import java.net.URLEncoder
  */
 object NfcTagCodec {
 
-    private val deviceQuery = Regex(
-        """(?:[?&#;])(?:q|did|deviceId|device_id|id)=([^&#\s]+)""",
-        RegexOption.IGNORE_CASE
-    )
-    private val deviceId = Regex("""[A-Za-z0-9][A-Za-z0-9_-]{5,63}""")
     private val ilifeHosts = setOf(
         "i.ilife798.com",
         "i.hnkzy.com",
@@ -26,13 +21,7 @@ object NfcTagCodec {
     )
 
     fun extractDeviceId(raw: String?): String? {
-        val text = raw?.trim()?.takeIf(String::isNotEmpty) ?: return null
-        val decoded = runCatching {
-            URLDecoder.decode(text, Charsets.UTF_8.name())
-        }.getOrDefault(text)
-        val candidate = deviceQuery.find(decoded)?.groupValues?.getOrNull(1)
-            ?: decoded.takeIf { deviceId.matches(it) }
-        return candidate?.trim()?.takeIf { deviceId.matches(it) }
+        return DeviceIdParser.normalizeOrNull(raw)
     }
 
     fun isIlifePayload(raw: String?): Boolean {

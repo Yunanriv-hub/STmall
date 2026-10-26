@@ -1,6 +1,7 @@
 package com.water.widget
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class DeviceIdParserTest {
@@ -67,5 +68,29 @@ class DeviceIdParserTest {
             "https://example.test/q/1/help",
             DeviceIdParser.normalize("https://example.test/q/1/help")
         )
+    }
+
+    @Test
+    fun unwrapsNestedQrUrlInsideNfcQParameter() {
+        assertEquals(
+            longDeviceId,
+            DeviceIdParser.normalize(
+                "https://i.ilife798.com/nfc.html?q=" +
+                    "https%3A%2F%2Fshare.example%2Fdevice%3FdeviceId%3D$longDeviceId"
+            )
+        )
+    }
+
+    @Test
+    fun extractsDeviceCodeFromJsonAlias() {
+        assertEquals(
+            "A-654321",
+            DeviceIdParser.normalizeOrNull("""{"deviceCode":"A-654321"}""")
+        )
+    }
+
+    @Test
+    fun returnsNullForUnrecognizedPayload() {
+        assertNull(DeviceIdParser.normalizeOrNull("https://example.test/q/1/help"))
     }
 }

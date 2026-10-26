@@ -93,6 +93,7 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 
 internal val LocalLiquidGlassBackdrop = staticCompositionLocalOf<LayerBackdrop?> { null }
+internal val LocalLiquidGlassEnabled = staticCompositionLocalOf { true }
 
 /**
  * Liquid Glass surface supplied by Kyant0/Backdrop (Apache-2.0).
@@ -145,7 +146,9 @@ private fun GlassIconButton(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val backdrop = LocalLiquidGlassBackdrop.current
-    val useNativeGlass = backdrop != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val glassEnabled = LocalLiquidGlassEnabled.current
+    val useNativeGlass = glassEnabled &&
+        backdrop != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val scale by animateFloatAsState(
         targetValue = if (pressed) 0.9f else 1f,
         animationSpec = spring(stiffness = 650f, dampingRatio = 0.68f),
@@ -198,7 +201,7 @@ private fun GlassIconButton(
                 )
             },
         )
-    } else {
+    } else if (glassEnabled) {
         Modifier
             .graphicsLayer {
                 scaleX = scale
@@ -211,6 +214,14 @@ private fun GlassIconButton(
                 ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
                 spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
             )
+    } else {
+        Modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surface)
             .clip(CircleShape)
             .background(Brush.linearGradient(listOf(topColor, bottomColor)))
             .border(
@@ -275,7 +286,9 @@ internal fun LiquidGlassBottomBar(
     val animationsEnabled = ValueAnimator.areAnimatorsEnabled()
     val borderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f)
     val backdrop = LocalLiquidGlassBackdrop.current
-    val useNativeGlass = backdrop != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val glassEnabled = LocalLiquidGlassEnabled.current
+    val useNativeGlass = glassEnabled &&
+        backdrop != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     var dragPosition by remember { mutableFloatStateOf(selectedIndex.toFloat()) }
     var isDragging by remember { mutableStateOf(false) }
     var suppressClicksUntil by remember { mutableLongStateOf(0L) }
@@ -349,7 +362,7 @@ internal fun LiquidGlassBottomBar(
             exportedBackdrop = tabsBackdrop,
             onDrawSurface = { drawRect(glassBrush) },
         )
-    } else {
+    } else if (glassEnabled) {
         Modifier
             .shadow(
                 elevation = 18.dp,
@@ -361,6 +374,10 @@ internal fun LiquidGlassBottomBar(
             .clip(shape)
             .background(glassBrush)
             .border(1.dp, borderColor, shape)
+    } else {
+        Modifier
+            .clip(shape)
+            .background(surface)
     }
 
     Box(
@@ -424,20 +441,22 @@ internal fun LiquidGlassBottomBar(
                             .copy(alpha = if (darkTheme) 0.2f else 0.14f),
                     )
                 )
-                Canvas(Modifier.matchParentSize()) {
-                    val glowCenter = Offset(
-                        x = size.width * (animatedPosition + 0.5f) / 2f,
-                        y = size.height * 0.5f,
-                    )
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            listOf(activeAccent.copy(alpha = 0.24f), Color.Transparent),
-                            center = glowCenter,
+                if (glassEnabled) {
+                    Canvas(Modifier.matchParentSize()) {
+                        val glowCenter = Offset(
+                            x = size.width * (animatedPosition + 0.5f) / 2f,
+                            y = size.height * 0.5f,
+                        )
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                listOf(activeAccent.copy(alpha = 0.24f), Color.Transparent),
+                                center = glowCenter,
+                                radius = size.width * 0.34f,
+                            ),
                             radius = size.width * 0.34f,
-                        ),
-                        radius = size.width * 0.34f,
-                        center = glowCenter,
-                    )
+                            center = glowCenter,
+                        )
+                    }
                 }
                 val indicatorSurface = if (selectedBackdrop != null) {
                     Modifier.drawBackdrop(
@@ -456,7 +475,7 @@ internal fun LiquidGlassBottomBar(
                         shadow = null,
                         onDrawSurface = { drawRect(selectedBrush) },
                     )
-                } else {
+                } else if (glassEnabled) {
                     Modifier
                         .clip(shape)
                         .background(selectedBrush)
@@ -465,6 +484,10 @@ internal fun LiquidGlassBottomBar(
                             Color.White.copy(alpha = if (darkTheme) 0.17f else 0.5f),
                             shape,
                         )
+                } else {
+                    Modifier
+                        .clip(shape)
+                        .background(activeAccent)
                 }
 
                 Box(
@@ -636,7 +659,9 @@ internal fun LiquidGlassPanel(
     val surface = MaterialTheme.colorScheme.surface
     val container = MaterialTheme.colorScheme.primary
     val backdrop = LocalLiquidGlassBackdrop.current
-    val useNativeGlass = backdrop != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val glassEnabled = LocalLiquidGlassEnabled.current
+    val useNativeGlass = glassEnabled &&
+        backdrop != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val glass = Brush.verticalGradient(
         listOf(
             surface.copy(alpha = if (useNativeGlass) 0.42f else 0.82f),
@@ -678,7 +703,7 @@ internal fun LiquidGlassPanel(
                 )
             },
         )
-    } else {
+    } else if (glassEnabled) {
         Modifier
             .shadow(
                 elevation = 16.dp,
@@ -690,6 +715,10 @@ internal fun LiquidGlassPanel(
             .clip(shape)
             .background(glass)
             .border(1.dp, Color.White.copy(alpha = 0.2f), shape)
+    } else {
+        Modifier
+            .clip(shape)
+            .background(surface)
     }
     Box(
         modifier
@@ -803,7 +832,9 @@ internal fun LiquidGlassIconDisc(
     content: @Composable BoxScope.() -> Unit,
 ) {
     val backdrop = LocalLiquidGlassBackdrop.current
-    val useNativeGlass = backdrop != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val glassEnabled = LocalLiquidGlassEnabled.current
+    val useNativeGlass = glassEnabled &&
+        backdrop != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val surface = MaterialTheme.colorScheme.surface
     val surfaceModifier = if (useNativeGlass) {
         Modifier.drawBackdrop(
@@ -837,7 +868,7 @@ internal fun LiquidGlassIconDisc(
                 )
             },
         )
-    } else {
+    } else if (glassEnabled) {
         Modifier
             .clip(CircleShape)
             .background(surface.copy(alpha = 0.78f))
@@ -846,6 +877,10 @@ internal fun LiquidGlassIconDisc(
                 MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
                 CircleShape,
             )
+    } else {
+        Modifier
+            .clip(CircleShape)
+            .background(surface)
     }
     Box(
         modifier

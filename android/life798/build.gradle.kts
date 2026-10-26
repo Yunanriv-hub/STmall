@@ -55,7 +55,7 @@ android {
             "API_CID",
             "\"${serviceValue("API_CID", "")}\""
         )
-        buildConfigField("String", "VERSION_NAME", "\"0.3.4\"")
+        buildConfigField("String", "VERSION_NAME", "\"0.3.5\"")
     }
 
     buildFeatures {

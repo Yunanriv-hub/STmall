@@ -56,6 +56,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             var themeMode by remember { mutableStateOf(app.preferences.themeMode) }
+            var glassEnabled by remember { mutableStateOf(app.preferences.liquidGlassEnabled) }
             val darkTheme = resolveDarkTheme(themeMode, isSystemInDarkTheme())
 
             SideEffect {
@@ -77,9 +78,14 @@ class MainActivity : ComponentActivity() {
                     onQuickUnlock = ::requestQuickUnlock,
                     themeMode = themeMode,
                     darkTheme = darkTheme,
+                    glassEnabled = glassEnabled,
                     onThemeModeChange = { mode ->
                         app.preferences.themeMode = mode
                         themeMode = mode
+                    },
+                    onGlassEnabledChange = { enabled ->
+                        app.preferences.liquidGlassEnabled = enabled
+                        glassEnabled = enabled
                     },
                 )
             }

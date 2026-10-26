@@ -28,6 +28,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -37,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -45,8 +47,10 @@ import com.fktm.app.ui.LiquidGlassAmbientBackground
 import com.fktm.app.ui.LiquidGlassHeader
 import com.fktm.app.ui.LiquidGlassPanel
 import com.fktm.app.ui.LocalLiquidGlassBackdrop
+import com.fktm.app.ui.LocalLiquidGlassEnabled
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.water.widget.GlassPreferences
 
 @Composable
 fun NfcTagScreen(
@@ -56,12 +60,16 @@ fun NfcTagScreen(
     onWriteDevice: (String) -> Unit,
     onAddDevice: (String) -> Unit,
     onCopyDeviceId: (String) -> Unit,
+    autoStartEnabled: Boolean,
+    onAutoStartChange: (Boolean) -> Unit,
 ) {
     var writeId by rememberSaveable { mutableStateOf(state.writeDeviceId) }
     val glassBackdrop = rememberLayerBackdrop()
+    val glassEnabled = GlassPreferences.isEnabled(LocalContext.current)
 
     CompositionLocalProvider(
         LocalLiquidGlassBackdrop provides glassBackdrop,
+        LocalLiquidGlassEnabled provides glassEnabled,
         LocalContentColor provides MaterialTheme.colorScheme.onBackground,
     ) {
         Box(Modifier.fillMaxSize()) {
@@ -69,11 +77,15 @@ fun NfcTagScreen(
                 Modifier
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.background)
-                    .layerBackdrop(glassBackdrop)
+                    .then(
+                        if (glassEnabled) Modifier.layerBackdrop(glassBackdrop) else Modifier
+                    )
             ) {
-                LiquidGlassAmbientBackground(
-                    darkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
-                )
+                if (glassEnabled) {
+                    LiquidGlassAmbientBackground(
+                        darkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
+                    )
+                }
             }
             Column(
                 modifier = Modifier
@@ -194,6 +206,32 @@ fun NfcTagScreen(
             enabled = writeId.isNotBlank() && !state.busy
         ) {
             Text("写入到 NFC 标签")
+        }
+
+        LiquidGlassPanel(
+            shape = RoundedCornerShape(20.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                horizontal = 16.dp,
+                vertical = 12.dp,
+            ),
+        ) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("碰一碰直接启动", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "识别到已保存的默认饮水机后自动启动",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = autoStartEnabled,
+                    onCheckedChange = onAutoStartChange,
+                )
+            }
         }
 
         Text(

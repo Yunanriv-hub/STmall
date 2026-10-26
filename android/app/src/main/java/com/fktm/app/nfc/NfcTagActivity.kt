@@ -20,8 +20,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.fktm.app.FktmApp
 import com.fktm.app.ui.theme.FktmTheme
+import com.water.widget.AccountStore
 import com.water.widget.DeviceAddActivity
 import com.water.widget.ConfigActivity
+import com.water.widget.WaterService
 import java.util.concurrent.Executors
 
 enum class NfcTagMode {
@@ -38,9 +40,15 @@ data class NfcTagUiState(
     val payload: String? = null,
     val status: String,
     val busy: Boolean = false,
+    val autoStartEnabled: Boolean = false,
 )
 
 class NfcTagActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
+
+    companion object {
+        const val EXTRA_RETURN_DEVICE_ID = "com.fktm.app.nfc.EXTRA_RETURN_DEVICE_ID"
+        const val EXTRA_DEVICE_ID_RESULT = "com.fktm.app.nfc.EXTRA_DEVICE_ID_RESULT"
+    }
 
     private val io = Executors.newSingleThreadExecutor()
     private var adapter: NfcAdapter? = null
@@ -57,6 +65,7 @@ class NfcTagActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
             nfcAvailable = true,
             nfcEnabled = false,
             status = "正在准备 NFC…",
+            autoStartEnabled = (application as FktmApp).preferences.nfcAutoStartWater,
         )
     )
 
@@ -110,6 +119,11 @@ class NfcTagActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
                         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         clipboard.setPrimaryClip(ClipData.newPlainText("慧生活设备编号", id))
                         toast("设备编号已复制")
+                    },
+                    autoStartEnabled = uiState.autoStartEnabled,
+                    onAutoStartChange = { enabled ->
+                        (application as FktmApp).preferences.nfcAutoStartWater = enabled
+                        uiState = uiState.copy(autoStartEnabled = enabled)
                     },
                 )
             }
@@ -265,6 +279,17 @@ class NfcTagActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
     private fun showPayload(raw: String?, fromSystemIntent: Boolean) {
         val payload = raw?.trim()?.takeIf(String::isNotEmpty)
         val id = NfcTagCodec.extractDeviceId(payload)
+        if (
+            id != null &&
+            intent.getBooleanExtra(EXTRA_RETURN_DEVICE_ID, false)
+        ) {
+            setResult(
+                RESULT_OK,
+                Intent().putExtra(EXTRA_DEVICE_ID_RESULT, id),
+            )
+            finish()
+            return
+        }
         uiState = uiState.copy(
             busy = false,
             payload = payload ?: uiState.payload,
@@ -275,6 +300,24 @@ class NfcTagActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
                 else -> "已读取标签，但未识别设备编号"
             },
         )
+        if (id != null && uiState.mode == NfcTagMode.READ) {
+            tryAutoStartWater(id)
+        }
+    }
+
+    private fun tryAutoStartWater(deviceId: String) {
+        if (!uiState.autoStartEnabled) return
+        val account = AccountStore.getCurrent(this) ?: return
+        if (deviceId !in account.rememberedDevices()) return
+        when (WaterService.start(this, deviceId, android.appwidget.AppWidgetManager.INVALID_APPWIDGET_ID)) {
+            WaterService.StartResult.STARTED -> {
+                uiState = uiState.copy(status = "已识别并启动默认饮水机")
+            }
+            WaterService.StartResult.ALREADY_RUNNING -> {
+                uiState = uiState.copy(status = "饮水机已在运行")
+            }
+            WaterService.StartResult.FAILED -> Unit
+        }
     }
 
     @Suppress("DEPRECATION")

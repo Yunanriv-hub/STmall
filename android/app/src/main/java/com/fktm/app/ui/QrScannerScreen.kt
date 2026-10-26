@@ -49,6 +49,7 @@ import com.google.zxing.PlanarYUVLuminanceSource
 import com.google.zxing.common.HybridBinarizer
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.water.widget.GlassPreferences
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -68,6 +69,7 @@ fun QrScannerScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val glassBackdrop = rememberLayerBackdrop()
+    val glassEnabled = GlassPreferences.isEnabled(context)
 
     var granted by remember {
         mutableStateOf(
@@ -127,20 +129,31 @@ fun QrScannerScreen(
         }
     }
 
-    CompositionLocalProvider(LocalLiquidGlassBackdrop provides glassBackdrop) {
+    CompositionLocalProvider(
+        LocalLiquidGlassBackdrop provides glassBackdrop,
+        LocalLiquidGlassEnabled provides glassEnabled,
+    ) {
         Box(Modifier.fillMaxSize()) {
             Box(
                 Modifier
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.background)
-                    .layerBackdrop(glassBackdrop)
+                    .then(
+                        if (glassEnabled) {
+                            Modifier.layerBackdrop(glassBackdrop)
+                        } else {
+                            Modifier
+                        }
+                    )
             ) {
                 if (granted) {
                     AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
                 } else {
-                    LiquidGlassAmbientBackground(
-                        darkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
-                    )
+                    if (glassEnabled) {
+                        LiquidGlassAmbientBackground(
+                            darkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
+                        )
+                    }
                     Column(
                         modifier = Modifier.align(Alignment.Center).padding(24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,

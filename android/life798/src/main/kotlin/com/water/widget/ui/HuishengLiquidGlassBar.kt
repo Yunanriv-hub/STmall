@@ -85,6 +85,7 @@ internal fun HuishengLiquidGlassBar(
     selectedIndex: Int,
     onSelected: (Int) -> Unit,
     backdrop: LayerBackdrop? = null,
+    glassEnabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     if (tabs.isEmpty()) return
@@ -133,7 +134,8 @@ internal fun HuishengLiquidGlassBar(
         },
         label = "huisheng-glass-lens-stretch",
     )
-    val useNativeGlass = backdrop != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val useNativeGlass = glassEnabled &&
+        backdrop != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val tabsBackdrop = rememberLayerBackdrop()
     val selectedBackdrop = if (useNativeGlass) {
         rememberCombinedBackdrop(backdrop!!, tabsBackdrop)
@@ -190,7 +192,7 @@ internal fun HuishengLiquidGlassBar(
             exportedBackdrop = tabsBackdrop,
             onDrawSurface = { drawRect(glassBrush) },
         )
-    } else {
+    } else if (glassEnabled) {
         Modifier
             .shadow(
                 elevation = 18.dp,
@@ -202,6 +204,10 @@ internal fun HuishengLiquidGlassBar(
             .clip(shape)
             .background(glassBrush)
             .border(1.dp, rim, shape)
+    } else {
+        Modifier
+            .clip(shape)
+            .background(colors.surface)
     }
 
     Box(
@@ -292,7 +298,7 @@ internal fun HuishengLiquidGlassBar(
                     }
                 }
 
-                Canvas(Modifier.fillMaxSize()) {
+                if (glassEnabled) Canvas(Modifier.fillMaxSize()) {
                     val glowCenter = Offset(
                         x = size.width * (animatedPosition + 0.5f) / tabs.size,
                         y = size.height * 0.5f,
@@ -334,7 +340,7 @@ internal fun HuishengLiquidGlassBar(
                         shadow = null,
                         onDrawSurface = { drawRect(selectedBrush) },
                     )
-                } else {
+                } else if (glassEnabled) {
                     Modifier
                         .clip(shape)
                         .background(selectedBrush)
@@ -343,6 +349,10 @@ internal fun HuishengLiquidGlassBar(
                             Color.White.copy(alpha = if (darkTheme) 0.16f else 0.46f),
                             shape,
                         )
+                } else {
+                    Modifier
+                        .clip(shape)
+                        .background(activeAccent)
                 }
 
                 Box(
