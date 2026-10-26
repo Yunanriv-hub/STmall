@@ -29,8 +29,8 @@ android {
         applicationId = "com.rea.campuslite"
         minSdk = 26
         targetSdk = 36
-        versionCode = 24
-        versionName = "0.5.0"
+        versionCode = 25
+        versionName = "0.6.0"
         buildConfigField(
             "String",
             "PANGGUAI_APP_SECRET",

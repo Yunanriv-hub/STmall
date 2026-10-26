@@ -1,10 +1,10 @@
 {
   "channel": "stable",
-  "versionName": "0.5.0",
-  "versionCode": 24,
+  "versionName": "0.6.0",
+  "versionCode": 25,
   "isReady": false,
   "minVersionCode": 1,
-  "releaseNotes": "STmall 0.5.0：新增胖乖生活与首页扫一扫，慧生活主要卡片统一液态玻璃，修复底栏归属、模块转场跳动和背景图主题闪烁。项目继续只通过本地 APK 分发。",
+  "releaseNotes": "STmall 0.6.0：新增完美校园绑定房间与水电用量只读查询，不含健康打卡、校内签到、定位、粮票任务或自动提交。项目继续只通过本地 APK 分发。",
   "releaseUrl": "",
   "assets": []
 }

@@ -36,7 +36,7 @@ STmall 将天猫校园的智能宿舍、蓝牙门锁、校园饮水，以及慧�
 ## 主要功能
 
 - 主界面分为“主页 / 功能 / 我的”三页，支持日间、跟随系统和纯黑暗黑模式。
-- “智能宿舍”“慧生活”“U净”“胖乖生活”“一键开门”“一键接水”“扫一扫”“U净扫一扫”模块可独立显示或隐藏。
+- “智能宿舍”“慧生活”“U净”“胖乖生活”“完美校园”“一键开门”“一键接水”“扫一扫”“U净扫一扫”模块可独立显示或隐藏。
 - 自绘矢量图标与自适应布局，兼容不同屏幕尺寸、字体缩放和系统栏高度。
 - 底部液态玻璃导航栏通过官方 Backdrop 采样页面背景，叠加模糊、圆角透镜、
   高光、弹性胶囊和按压反馈。
@@ -50,6 +50,7 @@ STmall 将天猫校园的智能宿舍、蓝牙门锁、校园饮水，以及慧�
 - 支持 U净手机号登录、扫码收藏多台洗衣机、空闲状态、订单倒计时、
   Nordic/Cypress 蓝牙启动、机身时间同步与支付宝订单支付。
 - 支持胖乖生活短信登录、扫码设备、最近设备、服务项和历史订单。
+- 支持完美校园学校代码、绑定房间、水电剩余和近七日用量只读查询。
 - 主页提供一键开门、一键接水、胖乖扫一扫和 U净扫一扫；其余校园服务集中在横向功能卡片中。
 - STmall“我的”使用“天猫校园 / 慧生活”双入口，分别进入两套账户与服务。
 - “我的”还提供 U净账号入口；门锁、饮水机和 U净设备添加后均可重新命名。
@@ -186,15 +187,15 @@ android/app/build/outputs/apk/release/app-release.apk
 
 | 项目 | 值 |
 |---|---|
-| 版本 | `0.5.0` |
-| versionCode | `24` |
+| 版本 | `0.6.0` |
+| versionCode | `25` |
 | 包名 | `com.rea.campuslite` |
 | minSdk | `26` |
 | targetSdk | `36` |
-| Release APK | `STmall_0.5.0.apk` |
-| SHA-256 | `5FE0E9D457F1724C3DDFB19E5FCB98E342B47F41122EA0209769E94BCA50F157` |
+| Release APK | `STmall_0.6.0.apk` |
+| SHA-256 | `896A5456A3E7ED7E2BF15CB25E38B2C37196F8BAB54305860F482146622E13DF` |
 
-该版本已通过 275 项 JVM 单元测试、release 编译、Android Lint 关键检查和
+该版本已通过 277 项 JVM 单元测试、release 编译、Android Lint 关键检查和
 v2 签名校验。
 
 ## 兼容性说明
@@ -269,6 +270,9 @@ v2 签名校验。
 - 胖乖生活参考 `Night-stars-1/wash` 的公开接口行为，未复制其签名配置、
   明文 Token 存储或源码；安全审查见
   [PANGGUAI_SECURITY_AUDIT.md](docs/PANGGUAI_SECURITY_AUDIT.md)。
+- 完美校园只独立实现 Apifox 文档中的房间水电查询，不接入
+  `WanMeiXiaoYuanCheckin` 的登录、虚拟设备 ID、打卡或任务代码；安全审查见
+  [PERFECT_CAMPUS_SECURITY_AUDIT.md](docs/PERFECT_CAMPUS_SECURITY_AUDIT.md)。
 - U净网络与蓝牙协议参考 `baijuqi/ujing-mini`，采用 MIT License，
   许可文本见 [LICENSE-ujing-mini](LICENSE-ujing-mini)。STmall 未复制
   `DUT-Ujing` 的签名密钥、Web 服务或项目代码。

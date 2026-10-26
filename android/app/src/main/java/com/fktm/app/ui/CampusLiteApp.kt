@@ -126,6 +126,8 @@ import com.fktm.app.FktmApp
 import com.fktm.app.credential.LockCredential
 import com.fktm.app.pangguai.PangguaiScreen
 import com.fktm.app.pangguai.PangguaiViewModel
+import com.fktm.app.perfectcampus.PerfectCampusScreen
+import com.fktm.app.perfectcampus.PerfectCampusViewModel
 import com.fktm.app.scan.DeviceScanActivity
 import com.fktm.app.settings.AppPreferences
 import com.fktm.app.settings.ThemeMode
@@ -168,6 +170,7 @@ private enum class CampusPage {
     SmartDorm,
     Ujing,
     Pangguai,
+    PerfectCampus,
     MyHub,
     TmallProfile,
     IlifeProfile,
@@ -189,6 +192,7 @@ private val CampusPage.depth: Int
         CampusPage.SmartDorm,
         CampusPage.Ujing,
         CampusPage.Pangguai,
+        CampusPage.PerfectCampus,
         CampusPage.TmallProfile,
         CampusPage.IlifeProfile,
         -> 1
@@ -229,6 +233,12 @@ private enum class HomeModule(
         AppPreferences.MODULE_PANGGUAI,
         "胖乖生活",
         "扫码洗护、最近设备与历史订单",
+        ModuleSection.FEATURES,
+    ),
+    PerfectCampus(
+        AppPreferences.MODULE_PERFECT_CAMPUS,
+        "完美校园",
+        "账号绑定房间与水电用量",
         ModuleSection.FEATURES,
     ),
     QuickUnlock(
@@ -288,11 +298,13 @@ fun CampusLiteApp(
     var detailOrigin by rememberSaveable { mutableStateOf(CampusPage.Home) }
     var ujingOrigin by rememberSaveable { mutableStateOf(CampusPage.Features) }
     var pangguaiOrigin by rememberSaveable { mutableStateOf(CampusPage.Features) }
+    var perfectCampusOrigin by rememberSaveable { mutableStateOf(CampusPage.Features) }
     var dormSection by rememberSaveable { mutableIntStateOf(0) }
     var showLockPicker by remember { mutableStateOf(false) }
     var themeReveal by remember { mutableStateOf<ThemeRevealSpec?>(null) }
     val ujingVm: UjingViewModel = viewModel()
     val pangguaiVm: PangguaiViewModel = viewModel()
+    val perfectCampusVm: PerfectCampusViewModel = viewModel()
     val homeUjingScanLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -360,6 +372,7 @@ fun CampusLiteApp(
             CampusPage.SmartDorm -> detailOrigin
             CampusPage.Ujing -> ujingOrigin
             CampusPage.Pangguai -> pangguaiOrigin
+            CampusPage.PerfectCampus -> perfectCampusOrigin
             CampusPage.Features,
             CampusPage.MyHub,
             -> CampusPage.Home
@@ -524,6 +537,10 @@ fun CampusLiteApp(
                         pangguaiOrigin = CampusPage.Features
                         page = CampusPage.Pangguai
                     },
+                    onPerfectCampus = {
+                        perfectCampusOrigin = CampusPage.Features
+                        page = CampusPage.PerfectCampus
+                    },
                     onOpenSettings = { openSettings(CampusPage.Features) },
                 )
 
@@ -553,6 +570,11 @@ fun CampusLiteApp(
                     },
                 )
 
+                CampusPage.PerfectCampus -> PerfectCampusScreen(
+                    vm = perfectCampusVm,
+                    onBack = { page = perfectCampusOrigin },
+                )
+
                 CampusPage.MyHub -> MyHubScreen(
                     onTmall = {
                         detailOrigin = CampusPage.MyHub
@@ -569,6 +591,10 @@ fun CampusLiteApp(
                     onPangguai = {
                         pangguaiOrigin = CampusPage.MyHub
                         page = CampusPage.Pangguai
+                    },
+                    onPerfectCampus = {
+                        perfectCampusOrigin = CampusPage.MyHub
+                        page = CampusPage.PerfectCampus
                     },
                 )
 
@@ -687,6 +713,11 @@ fun CampusLiteApp(
                             else -> 2
                         }
                         CampusPage.Pangguai -> when (pangguaiOrigin) {
+                            CampusPage.Home -> 0
+                            CampusPage.Features -> 1
+                            else -> 2
+                        }
+                        CampusPage.PerfectCampus -> when (perfectCampusOrigin) {
                             CampusPage.Home -> 0
                             CampusPage.Features -> 1
                             else -> 2
@@ -934,6 +965,7 @@ private fun FeatureHubScreen(
     onIlife: () -> Unit,
     onUjing: () -> Unit,
     onPangguai: () -> Unit,
+    onPerfectCampus: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     val modules = HomeModule.entries.filter {
@@ -985,6 +1017,7 @@ private fun FeatureHubScreen(
                     HomeModule.Ilife -> "慧"
                     HomeModule.Ujing -> "洗"
                     HomeModule.Pangguai -> "胖"
+                    HomeModule.PerfectCampus -> "完"
                     else -> "·"
                 }
                 val container = when (module) {
@@ -992,6 +1025,7 @@ private fun FeatureHubScreen(
                     HomeModule.Ilife -> MaterialTheme.colorScheme.secondaryContainer
                     HomeModule.Ujing -> MaterialTheme.colorScheme.tertiaryContainer
                     HomeModule.Pangguai -> MaterialTheme.colorScheme.surfaceVariant
+                    HomeModule.PerfectCampus -> MaterialTheme.colorScheme.primaryContainer
                     else -> MaterialTheme.colorScheme.surfaceVariant
                 }
                 val content = when (module) {
@@ -999,6 +1033,7 @@ private fun FeatureHubScreen(
                     HomeModule.Ilife -> MaterialTheme.colorScheme.onSecondaryContainer
                     HomeModule.Ujing -> MaterialTheme.colorScheme.onTertiaryContainer
                     HomeModule.Pangguai -> MaterialTheme.colorScheme.onSurfaceVariant
+                    HomeModule.PerfectCampus -> MaterialTheme.colorScheme.onPrimaryContainer
                     else -> MaterialTheme.colorScheme.onSurfaceVariant
                 }
                 MyHubEntryCard(
@@ -1012,6 +1047,7 @@ private fun FeatureHubScreen(
                         HomeModule.Ilife -> onIlife
                         HomeModule.Ujing -> onUjing
                         HomeModule.Pangguai -> onPangguai
+                        HomeModule.PerfectCampus -> onPerfectCampus
                         else -> ({})
                     },
                 )
@@ -1051,6 +1087,7 @@ private fun ModuleFeatureCard(
         HomeModule.Ilife -> if (darkTheme) Color(0xFF8AB4F8) else Color(0xFF315F9C)
         HomeModule.Ujing -> if (darkTheme) Color(0xFFC7A7FF) else Color(0xFF6E4AB0)
         HomeModule.Pangguai -> if (darkTheme) Color(0xFF78D8CE) else Color(0xFF087E76)
+        HomeModule.PerfectCampus -> if (darkTheme) Color(0xFFF0C36A) else Color(0xFF93610A)
         HomeModule.QuickUnlock -> MaterialTheme.colorScheme.primary
         HomeModule.QuickWater -> MaterialTheme.colorScheme.secondary
         HomeModule.UjingScanner -> MaterialTheme.colorScheme.tertiary
@@ -1061,6 +1098,7 @@ private fun ModuleFeatureCard(
         HomeModule.Ilife -> if (darkTheme) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFE8EEFB)
         HomeModule.Ujing -> if (darkTheme) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFF2ECFF)
         HomeModule.Pangguai -> MaterialTheme.colorScheme.surfaceVariant
+        HomeModule.PerfectCampus -> MaterialTheme.colorScheme.surfaceVariant
         HomeModule.QuickUnlock -> MaterialTheme.colorScheme.surfaceVariant
         HomeModule.QuickWater -> MaterialTheme.colorScheme.surfaceVariant
         HomeModule.UjingScanner -> MaterialTheme.colorScheme.surfaceVariant
@@ -1071,6 +1109,7 @@ private fun ModuleFeatureCard(
         HomeModule.Ilife -> "慧生活"
         HomeModule.Ujing -> "U净"
         HomeModule.Pangguai -> "胖乖生活"
+        HomeModule.PerfectCampus -> "完美校园"
         HomeModule.QuickUnlock -> "一键开门"
         HomeModule.QuickWater -> "一键接水"
         HomeModule.UjingScanner -> "U净扫一扫"
@@ -1081,6 +1120,7 @@ private fun ModuleFeatureCard(
         HomeModule.Ilife -> "钱包 · 积分 · 账单"
         HomeModule.Ujing -> "洗衣 · 洗鞋 · 烘干"
         HomeModule.Pangguai -> "扫码洗护 · 历史订单"
+        HomeModule.PerfectCampus -> "绑定房间 · 水电用量"
         HomeModule.QuickUnlock -> "快速开门"
         HomeModule.QuickWater -> "默认饮水机"
         HomeModule.UjingScanner -> "扫描机身二维码"
@@ -1091,6 +1131,7 @@ private fun ModuleFeatureCard(
         HomeModule.Ilife -> ({ onIlife() })
         HomeModule.Ujing -> ({})
         HomeModule.Pangguai -> ({})
+        HomeModule.PerfectCampus -> ({})
         HomeModule.QuickUnlock -> ({ onSmartDorm() })
         HomeModule.QuickWater -> ({ onIlife() })
         HomeModule.UjingScanner -> ({})
@@ -1106,6 +1147,7 @@ private fun ModuleFeatureCard(
                 HomeModule.Ilife -> IlifeGlyph(color)
                 HomeModule.Ujing -> UjingGlyph(color)
                 HomeModule.Pangguai -> ScannerGlyph(color)
+                HomeModule.PerfectCampus -> WaterDropGlyph(color)
                 HomeModule.QuickUnlock -> SmartDormGlyph(color)
                 HomeModule.QuickWater -> WaterDropGlyph(color)
                 HomeModule.UjingScanner -> ScannerGlyph(color)
@@ -2065,6 +2107,7 @@ private fun MyHubScreen(
     onIlife: () -> Unit,
     onUjing: () -> Unit,
     onPangguai: () -> Unit,
+    onPerfectCampus: () -> Unit,
 ) {
     Column(
         Modifier
@@ -2110,6 +2153,14 @@ private fun MyHubScreen(
             container = MaterialTheme.colorScheme.surfaceVariant,
             contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             onClick = onPangguai,
+        )
+        MyHubEntryCard(
+            title = "完美校园",
+            subtitle = "账号绑定房间与水电用量只读查询",
+            badge = "完",
+            container = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            onClick = onPerfectCampus,
         )
 
         Text(
@@ -2626,7 +2677,7 @@ private fun SettingsScreen(
 
         SettingsCard(
             title = "主页模块",
-            subtitle = "控制主页快捷动作与 U净扫码入口；功能入口统一放在功能页。",
+            subtitle = "控制主页快捷动作与扫码入口；功能入口统一放在功能页。",
         ) {
             val homeModules = HomeModule.entries.filter { it.section == ModuleSection.HOME }
             homeModules.forEachIndexed { index, module ->
