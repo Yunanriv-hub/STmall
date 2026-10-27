@@ -359,7 +359,7 @@ class UjingApi {
         branchType: Int? = null,
         jumpToAliMini: Boolean? = null,
         alipayF2FNoAds: Boolean = false,
-        couponId: String? = null,
+        couponId: String = "",
         redPacketId: String? = null,
         isUseRedPacket: Boolean = false,
     ): Envelope<JsonElement> = call(
@@ -374,7 +374,8 @@ class UjingApi {
             "alipayF2FNoAds" to alipayF2FNoAds.toString(),
             // 这两个字段在服务端是可选整数。未使用优惠时发送空字符串会被
             // strconv.ParseInt 解析为 500；必须让 urlOf 完全省略该参数。
-            "couponId" to optionalNumericId(couponId),
+            // 官方无优惠券时仍发送空 couponId；只有 redPacketId 是严格整数。
+            "couponId" to couponId,
             "redPacketId" to optionalNumericId(redPacketId),
             "isUseRedPacket" to isUseRedPacket.toString(),
         ),

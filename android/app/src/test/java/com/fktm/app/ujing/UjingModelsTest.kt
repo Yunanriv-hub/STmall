@@ -101,6 +101,17 @@ class UjingModelsTest {
     }
 
     @Test
+    fun findsAlipayOrderStringInsideUnknownWrappersAndArrays() {
+        val parsed = parsePayArguments(
+            UjingJson.parseToJsonElement(
+                """{"newWrapper":[{"serverPayload":"app_id=1&biz_content=x&sign=y"}]}"""
+            )
+        )
+
+        assertEquals("app_id=1&biz_content=x&sign=y", parsed.orderStr)
+    }
+
+    @Test
     fun parsesNumericPaymentFlagsWithoutMistakingUnknownData() {
         val skipped = parsePayArguments(
             UjingJson.parseToJsonElement("""{"skipPay":1,"payFlag":"0"}""")
@@ -109,13 +120,16 @@ class UjingModelsTest {
             UjingJson.parseToJsonElement("""{"payFlag":"1"}""")
         )
         val unknown = parsePayArguments(
-            UjingJson.parseToJsonElement("""{"newServerField":"not-a-payment-string"}""")
+            UjingJson.parseToJsonElement(
+                """{"newServerField":"not-a-payment-string","orderNo":"123456"}"""
+            )
         )
 
         assertTrue(skipped.skipPay)
         assertTrue(paid.alreadyPaid)
         assertEquals("", unknown.orderStr)
         assertTrue(unknown.responseKeys.contains("newServerField"))
+        assertTrue(unknown.responseKeys.contains("orderNo"))
     }
 
     @Test

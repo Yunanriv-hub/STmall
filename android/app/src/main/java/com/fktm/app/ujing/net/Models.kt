@@ -8,6 +8,7 @@ import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonDecoder
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -561,22 +562,22 @@ fun paymentChooseSign(channel: PayChannel): Int? =
 /**
  * 把服务端可能返回的支付参数形态归一化。
  *
- * 只在明确的支付字段中取值，不扫描整个 JSON，避免把普通订单号、签名或展示文案
- * 误当成支付宝订单串。未知字段只保留字段名供日志排查。
+ * 先按官方字段取值；若服务端给外层字段改名，再递归查找满足支付宝订单串特征的值。
+ * 通用回退只接受含 `app_id`、`biz_content`、`sign` 等支付宝参数的字符串，不会把
+ * 普通订单号、Token 或展示文案误交给 PayTask。
  */
 fun parsePayArguments(element: JsonElement?): PayArgumentsData {
     if (element == null) return PayArgumentsData()
-    if (element is JsonPrimitive) {
-        return PayArgumentsData(orderStr = element.payStringValue().orEmpty())
-    }
-    val obj = element as? JsonObject ?: return PayArgumentsData()
+    val obj = element as? JsonObject
+    val orderStr = extractKnownPaymentString(element)
+        ?: findAlipayOrderString(element)
     return PayArgumentsData(
-        orderStr = extractAlipayOrderString(obj).orEmpty(),
-        skipPay = obj.flexibleBool("skipPay", "skip_pay"),
-        jumpToQuery = obj.flexibleBool("jumpToQuery", "jump_to_query"),
-        payFlag = obj.flexibleInt("payFlag", "pay_flag"),
-        isPaid = obj.flexibleBool("isPaid", "paid"),
-        responseKeys = collectResponseKeys(obj),
+        orderStr = orderStr.orEmpty(),
+        skipPay = obj?.flexibleBool("skipPay", "skip_pay") ?: false,
+        jumpToQuery = obj?.flexibleBool("jumpToQuery", "jump_to_query") ?: false,
+        payFlag = obj?.flexibleInt("payFlag", "pay_flag"),
+        isPaid = obj?.flexibleBool("isPaid", "paid") ?: false,
+        responseKeys = collectResponseKeys(element),
     )
 }
 
@@ -597,75 +598,134 @@ private val PAY_CONTAINER_KEYS = setOf(
     "payinfo",
     "payparams",
     "payarguments",
+    "paymentarguments",
+    "payargs",
+    "paymentargs",
+    "payment",
     "alipay",
     "alipayargs",
+    "alipayparams",
 )
 
-private fun extractAlipayOrderString(
-    obj: JsonObject,
+private fun normalizePaymentKey(key: String): String =
+    key.lowercase().filter(Char::isLetterOrDigit)
+
+private fun extractKnownPaymentString(
+    element: JsonElement,
     depth: Int = 0,
 ): String? {
-    if (depth > 2) return null
-
-    obj.entries.firstOrNull { (key, _) -> key.lowercase() in PAY_STRING_KEYS }
-        ?.value
-        ?.let { value ->
-            (value as? JsonPrimitive)?.payStringValue()?.let { return it }
+    if (depth > 8) return null
+    return when (element) {
+        is JsonPrimitive -> element.paymentString()
+        is JsonArray -> element.firstNotNullOfOrNull { child ->
+            extractKnownPaymentString(child, depth + 1)
         }
-
-    obj.entries.firstOrNull { (key, _) -> key.lowercase() in PAY_CONTAINER_KEYS }
-        ?.value
-        ?.let { container ->
-            when (container) {
-                is JsonPrimitive -> container.payStringValue()
-
-                is JsonObject -> extractAlipayOrderString(container, depth + 1)
-                    ?: extractNestedPayString(container, depth + 1)
-
-                else -> null
+        is JsonObject -> {
+            element.entries.firstNotNullOfOrNull { (key, value) ->
+                if (normalizePaymentKey(key) in PAY_STRING_KEYS) {
+                    (value as? JsonPrimitive)?.paymentString()
+                } else {
+                    null
+                }
+            } ?: element.entries.firstNotNullOfOrNull { (key, value) ->
+                if (normalizePaymentKey(key) in PAY_CONTAINER_KEYS) {
+                    extractKnownPaymentString(value, depth + 1)
+                } else {
+                    null
+                }
+            } ?: element.entries.firstNotNullOfOrNull { (key, value) ->
+                val normalized = normalizePaymentKey(key)
+                val isContainer = value is JsonObject || value is JsonArray
+                if (
+                    isContainer &&
+                    normalized !in PAY_STRING_KEYS &&
+                    normalized !in PAY_CONTAINER_KEYS
+                ) {
+                    extractKnownPaymentString(value, depth + 1)
+                } else {
+                    null
+                }
             }
         }
-        ?.let { return it }
-
-    return extractNestedPayString(obj, depth)
+    }
 }
 
-private fun JsonPrimitive.payStringValue(): String? {
+private fun JsonPrimitive.paymentString(): String? {
     val text = content.trim()
     if (text.isBlank() || text == "null") return null
     if (text.startsWith("{")) {
-        val nested = runCatching { UjingJson.parseToJsonElement(text) as? JsonObject }
+        val nested = runCatching { UjingJson.parseToJsonElement(text) }
             .getOrNull()
-        if (nested != null) return extractAlipayOrderString(nested)
+        if (nested != null) {
+            return extractKnownPaymentString(nested)
+                ?: findAlipayOrderString(nested)
+        }
     }
     return text
 }
 
-private fun extractNestedPayString(obj: JsonObject, depth: Int): String? {
-    if (depth > 2) return null
-    for ((key, value) in obj) {
-        val normalized = key.lowercase()
-        if (normalized in PAY_STRING_KEYS || normalized in PAY_CONTAINER_KEYS) continue
-        val child = value as? JsonObject ?: continue
-        extractAlipayOrderString(child, depth + 1)?.let { return it }
+private fun findAlipayOrderString(
+    element: JsonElement,
+    depth: Int = 0,
+): String? {
+    if (depth > 8) return null
+    return when (element) {
+        is JsonPrimitive -> {
+            val text = element.content.trim()
+            when {
+                text.looksLikeAlipayOrderString() -> text
+                text.startsWith("{") || text.startsWith("[") -> {
+                    val nested = runCatching { UjingJson.parseToJsonElement(text) }
+                        .getOrNull()
+                    nested?.let { findAlipayOrderString(it, depth + 1) }
+                }
+                else -> null
+            }
+        }
+        is JsonObject -> element.values.firstNotNullOfOrNull {
+            findAlipayOrderString(it, depth + 1)
+        }
+        is JsonArray -> element.firstNotNullOfOrNull {
+            findAlipayOrderString(it, depth + 1)
+        }
     }
-    return null
 }
 
-private fun collectResponseKeys(obj: JsonObject): List<String> {
+private fun String.looksLikeAlipayOrderString(): Boolean {
+    val text = lowercase()
+    val hasAppId = "app_id=" in text || "\"app_id\"" in text
+    val hasBizContent = "biz_content=" in text || "\"biz_content\"" in text
+    val hasSign = "sign=" in text || "\"sign\"" in text || "sign_type=" in text
+    return hasAppId && hasBizContent && hasSign
+}
+
+private fun collectResponseKeys(
+    element: JsonElement,
+    prefix: String = "",
+    depth: Int = 0,
+): List<String> {
+    if (depth > 4) return emptyList()
     val keys = LinkedHashSet<String>()
-    obj.keys.take(12).forEach(keys::add)
-    for ((actualKey, value) in obj) {
-        if (actualKey.lowercase() !in PAY_CONTAINER_KEYS) continue
-        val child = value as? JsonObject ?: continue
-        child.keys.take(12).forEach { keys.add("$actualKey.$it") }
+    when (element) {
+        is JsonObject -> {
+            element.entries.take(20).forEach { (key, value) ->
+                val path = if (prefix.isBlank()) key else "$prefix.$key"
+                keys.add(path)
+                keys.addAll(collectResponseKeys(value, path, depth + 1))
+            }
+        }
+        is JsonArray -> element.take(3).forEachIndexed { index, value ->
+            val path = if (prefix.isBlank()) "[$index]" else "$prefix[$index]"
+            keys.addAll(collectResponseKeys(value, path, depth + 1))
+        }
+        else -> Unit
     }
     return keys.toList()
 }
 
 private fun JsonObject.flexibleBool(vararg keys: String): Boolean {
-    val normalized = keys.map { it.lowercase() }.toSet()
-    val raw = entries.firstOrNull { it.key.lowercase() in normalized }?.value
+    val normalized = keys.map(::normalizePaymentKey).toSet()
+    val raw = entries.firstOrNull { normalizePaymentKey(it.key) in normalized }?.value
         ?: return false
     val text = (raw as? JsonPrimitive)?.content?.trim()?.lowercase() ?: return false
     return when (text) {
@@ -676,8 +736,9 @@ private fun JsonObject.flexibleBool(vararg keys: String): Boolean {
 }
 
 private fun JsonObject.flexibleInt(vararg keys: String): Int? {
-    val normalized = keys.map { it.lowercase() }.toSet()
-    val raw = entries.firstOrNull { it.key.lowercase() in normalized }?.value as? JsonPrimitive
+    val normalized = keys.map(::normalizePaymentKey).toSet()
+    val raw = entries.firstOrNull { normalizePaymentKey(it.key) in normalized }
+        ?.value as? JsonPrimitive
         ?: return null
     val text = raw.content.trim()
     return text.toIntOrNull() ?: text.toDoubleOrNull()?.toInt()

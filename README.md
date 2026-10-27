@@ -193,9 +193,9 @@ android/app/build/outputs/apk/release/app-release.apk
 | minSdk | `26` |
 | targetSdk | `36` |
 | Release APK | `Cumpus_0.6.8.apk` |
-| SHA-256 | `2DF4BE4B07245D84D534E6DF7A64247BC89D846779A23F93F4741B31BAEBF365` |
+| SHA-256 | `03BC1F7E821D36E777B334FD8CEFCD569751CFD3E891FC812F45CD90805C5C17` |
 
-该版本已通过 285 项 JVM 单元测试、release 编译、Android Lint 关键检查和
+该版本已通过 286 项 JVM 单元测试、release 编译、Android Lint 关键检查和
 v2 签名校验。
 
 ## 兼容性说明
