@@ -152,6 +152,9 @@ class UjingApi {
     private fun biz(): Map<String, String> =
         Headers.bi(token ?: throw ApiException(401, "未登录：token 为空"))
 
+    private fun androidPaymentBiz(): Map<String, String> =
+        Headers.androidPayment(token ?: throw ApiException(401, "未登录：token 为空"))
+
     // -----------------------------------------------------------------
     // 鉴权
     // -----------------------------------------------------------------
@@ -328,7 +331,7 @@ class UjingApi {
         deviceId: String? = null,
         creativeNumber: String? = null
     ): Envelope<PayMethodsData> = call(
-        "GET", "/api/v1/payment/methods", biz(),
+        "GET", "/api/v1/payment/methods", androidPaymentBiz(),
         query = mapOf(
             "orderId" to orderId,
             "include" to include,
@@ -360,7 +363,7 @@ class UjingApi {
         redPacketId: String? = null,
         isUseRedPacket: Boolean = false,
     ): Envelope<JsonElement> = call(
-        "GET", "/api/v1/payment/arguments", biz(),
+        "GET", "/api/v1/payment/arguments", androidPaymentBiz(),
         query = mapOf(
             "channel" to channel,
             "orderId" to orderId,
@@ -380,14 +383,14 @@ class UjingApi {
 
     /** 支付成功后向服务端回执。 */
     suspend fun payStatusCommon(orderId: String, channel: String): Envelope<JsonElement> = call(
-        "GET", "/api/v1/payment/$orderId/payStatus", biz(),
+        "GET", "/api/v1/payment/$orderId/payStatus", androidPaymentBiz(),
         query = mapOf("channel" to channel),
         d = JsonElement.serializer()
     )
 
     /** 轮询支付结果（`status == "3"` 即成功）。 */
     suspend fun lastPayStatus(orderId: String): Envelope<PayStatusData> = call(
-        "GET", "/api/v1/app/payment/$orderId/lastPayStatus", biz(),
+        "GET", "/api/v1/app/payment/$orderId/lastPayStatus", androidPaymentBiz(),
         d = PayStatusData.serializer()
     )
 

@@ -1,6 +1,7 @@
 package com.fktm.app.ujing
 
 import com.fktm.app.ujing.net.DeviceWashModel
+import com.fktm.app.ujing.net.Headers
 import com.fktm.app.ujing.net.ModuleType
 import com.fktm.app.ujing.net.OrderData
 import com.fktm.app.ujing.net.PayChannel
@@ -159,5 +160,15 @@ class UjingModelsTest {
                 PayChannel(channel = "alipay", isPaymentSignAgreen = true)
             )
         )
+    }
+
+    @Test
+    fun usesCurrentAndroidHeadersForPaymentRequests() {
+        val headers = Headers.androidPayment("token")
+
+        assertEquals("BA", headers["x-app-code"])
+        assertEquals("2.4.18", headers["x-app-version"])
+        assertEquals("1.1.79", headers["weex-version"])
+        assertEquals("Bearer token", headers["Authorization"])
     }
 }

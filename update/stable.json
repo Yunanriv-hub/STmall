@@ -1,10 +1,10 @@
 {
   "channel": "stable",
-  "versionName": "0.6.7",
-  "versionCode": 32,
+  "versionName": "0.6.8",
+  "versionCode": 33,
   "isReady": false,
   "minVersionCode": 1,
-  "releaseNotes": "Cumpus 0.6.7：对照 U净官方 2.4.18 收银台修正 chooseSign 与 redPacketId 参数，修复支付接口成功但不返回 payInfo 的问题，并保留单次请求、防连点和防自动重发。项目继续只通过本地 APK 分发。",
+  "releaseNotes": "Cumpus 0.6.8：U净支付相关请求切换到官方 Android 2.4.18 请求头与 washer Weex 1.1.79，修复接口成功但不返回 payInfo 的问题，并保留官方支付参数及防重复请求处理。项目继续只通过本地 APK 分发。",
   "releaseUrl": "",
   "assets": []
 }
