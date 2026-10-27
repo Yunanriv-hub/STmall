@@ -12,6 +12,7 @@ import kotlinx.serialization.json.JsonDecoder
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import java.net.URI
 import java.net.URLDecoder
 
 /**
@@ -511,6 +512,9 @@ data class PayChannel(
     /** 只有官方 `alipay` 渠道返回 PayTask 可消费的 orderInfo。 */
     val alipaySdkCompatible: Boolean
         get() = channel.equals("alipay", ignoreCase = true)
+
+    val alipayDeepLinkCompatible: Boolean
+        get() = channel.equals("alipayF2F", ignoreCase = true)
 }
 
 @Serializable
@@ -523,7 +527,7 @@ data class PayMethodsData(
  * 归一化后的 `GET /payment/arguments` 响应。
  *
  * 原始响应先以 [JsonElement] 接收，再按官方收银台契约在
- * `payInfo.orderInfo`、`payInfo` 字符串或顶层 `orderInfo` 中取值。
+ * `payInfo.orderInfo`、`payInfo` 字符串、顶层支付 URL 或顶层 `orderInfo` 中取值。
  *
  * - [skipPay] = true → 服务端已免密扣款完成，客户端**不要**再唤起收银台；
  * - [jumpToQuery] = true → 跳支付状态页轮询。
@@ -531,6 +535,7 @@ data class PayMethodsData(
 enum class PaymentPayloadKind {
     NONE,
     ALIPAY_SDK,
+    APP_SCHEME,
     URL,
     JSON_OBJECT,
     QR_OR_TEXT,
@@ -556,6 +561,10 @@ data class PayArgumentsData(
     val payloadLength: Int = 0,
     val payloadReason: String = "",
     val sourcePath: String = "",
+    /** 服务端原始支付内容，仅供客户端选择官方跳转/SDK，不写入日志。 */
+    val rawPaymentValue: String = "",
+    /** 可安全写入日志的 scheme/host/path，不含查询串。 */
+    val safeValueHint: String = "",
     /** 只用于诊断的字段路径，不包含字段值。 */
     val responseKeys: List<String> = emptyList(),
 ) {
@@ -651,13 +660,13 @@ class PaymentRequestGate(
 /**
  * 安全选择本 App 能消费的支付宝渠道。
  *
- * 只有官方 `alipay` 渠道会返回 PayTask 可消费的 `payInfo.orderInfo`。
- * `alipayF2F` 在官方 Android 客户端走收银台 H5，不是当前 App 已实现的 SDK 支付。
+ * 优先官方 `alipay` SDK 渠道；只有它缺失时才使用 `alipayF2F` App 跳转渠道。
  */
 fun preferredAlipayChannel(channels: List<PayChannel>): PayChannel? {
-    return channels.firstOrNull {
+    val usable = channels.filter { !it.needUpgrade }
+    return usable.firstOrNull {
         !it.needUpgrade && it.channel.equals("alipay", ignoreCase = true)
-    }
+    } ?: usable.firstOrNull { it.alipayDeepLinkCompatible }
 }
 
 /** 官方收银台只在已签约时发送 `chooseSign=1`；未签约时必须省略。 */
@@ -694,6 +703,17 @@ fun parsePayArguments(element: JsonElement?): PayArgumentsData {
 private fun normalizePaymentKey(key: String): String =
     key.lowercase().filter(Char::isLetterOrDigit)
 
+private val PAY_URL_KEYS = setOf(
+    "url",
+    "h5url",
+    "payurl",
+    "jumpurl",
+    "cashierurl",
+    "redirecturl",
+    "scheme",
+    "schemeurl",
+)
+
 private fun parsePayArgumentsObject(obj: JsonObject): PayArgumentsData {
     val payInfo = obj.valueForPaymentKey("payInfo")
     val topLevelOrderInfo = {
@@ -701,11 +721,27 @@ private fun parsePayArgumentsObject(obj: JsonObject): PayArgumentsData {
             ?.asPaymentString()
             ?.let { "orderInfo" to it }
     }
+    val topLevelPaymentUrl = obj.entries.firstNotNullOfOrNull { (key, value) ->
+        if (normalizePaymentKey(key) in PAY_URL_KEYS) {
+            value.asPaymentString()?.let { key to it }
+        } else {
+            null
+        }
+    }
     val candidate: Pair<String, String>? = when (payInfo) {
-        is JsonObject -> payInfo
-            .valueForPaymentKey("orderInfo")
-            ?.asPaymentString()
-            ?.let { "payInfo.orderInfo" to it }
+        is JsonObject -> {
+            payInfo.valueForPaymentKey("orderInfo")
+                ?.asPaymentString()
+                ?.let { "payInfo.orderInfo" to it }
+                ?: payInfo.entries.firstNotNullOfOrNull { (key, value) ->
+                    val normalized = normalizePaymentKey(key)
+                    if (normalized in PAY_URL_KEYS) {
+                        value.asPaymentString()?.let { "payInfo.$key" to it }
+                    } else {
+                        null
+                    }
+                }
+        }
         is JsonPrimitive -> {
             val nested = parseObjectJsonString(payInfo.content)
             if (nested != null) {
@@ -714,14 +750,18 @@ private fun parsePayArgumentsObject(obj: JsonObject): PayArgumentsData {
                     ?.let { "payInfo.orderInfo" to it }
             } else {
                 val primitive = payInfo.content.takeIf { it.isNotBlank() && it != "null" }
-                if (primitive != null) "payInfo" to primitive else topLevelOrderInfo()
+                if (primitive != null) {
+                    "payInfo" to primitive
+                } else {
+                    topLevelPaymentUrl ?: topLevelOrderInfo()
+                }
             }
         }
-        null -> topLevelOrderInfo()
+        null -> topLevelPaymentUrl ?: topLevelOrderInfo()
         else -> null
     }
     val parsed = if (candidate == null) {
-        PayArgumentsData(payloadReason = "未找到 payInfo.orderInfo 或 orderInfo")
+        PayArgumentsData(payloadReason = "未找到 payInfo.orderInfo、orderInfo 或支付跳转地址")
     } else {
         directPaymentPayload(candidate.second, candidate.first)
     }
@@ -742,9 +782,43 @@ private fun directPaymentPayload(raw: String, sourcePath: String): PayArgumentsD
         payloadLength = validation.length,
         payloadReason = validation.reason,
         sourcePath = sourcePath,
+        rawPaymentValue = raw,
+        safeValueHint = safePaymentValueHint(raw, validation.kind),
         responseKeys = listOf(sourcePath),
     )
 }
+
+private fun safePaymentValueHint(raw: String, kind: PaymentPayloadKind): String {
+    val text = raw.trim()
+    val uri = runCatching { URI(text) }.getOrNull()
+    if (uri?.scheme.isNullOrBlank() || !text.startsWith("${uri?.scheme}:", ignoreCase = true)) {
+        return kind.name.lowercase()
+    }
+    return runCatching {
+        buildString {
+            append(uri.scheme)
+            append("://")
+            uri.host?.let(::append)
+            uri.path?.let(::append)
+        }
+    }.getOrDefault("url")
+}
+
+/**
+ * 仅允许 U净当前账号下发的支付宝官方 App 跳转。
+ *
+ * 不使用 `Intent.parseUri`，也不接受任意自定义 scheme；调用方还必须把
+ * Intent 的 package 固定为支付宝官方包名，防止其他应用截获订单参数。
+ */
+fun isTrustedAlipayDeepLink(raw: String): Boolean = runCatching {
+    val uri = URI(raw.trim())
+    val scheme = uri.scheme.orEmpty().lowercase()
+    val host = uri.host.orEmpty().lowercase()
+    val path = uri.path.orEmpty().lowercase()
+    scheme in setOf("alipays", "alipay") &&
+        host == "platformapi" &&
+        path.startsWith("/startapp")
+}.getOrDefault(false)
 
 internal fun validateAlipaySdkOrderString(raw: String): PaymentStringValidation {
     if (raw.isEmpty()) return PaymentStringValidation(PaymentPayloadKind.NONE, 0, "支付串为空")
@@ -754,6 +828,9 @@ internal fun validateAlipaySdkOrderString(raw: String): PaymentStringValidation 
         text.startsWith("https://", ignoreCase = true)
     ) {
         return PaymentStringValidation(PaymentPayloadKind.URL, raw.length, "返回的是网页地址")
+    }
+    if (runCatching { URI(text).scheme }.getOrNull()?.isNotBlank() == true) {
+        return PaymentStringValidation(PaymentPayloadKind.APP_SCHEME, raw.length, "返回的是应用跳转协议")
     }
     if (text.startsWith("{")) {
         return PaymentStringValidation(PaymentPayloadKind.JSON_OBJECT, raw.length, "返回的是 JSON 对象")

@@ -14,6 +14,7 @@ import com.fktm.app.ujing.net.UjingJson
 import com.fktm.app.ujing.net.UjingApi
 import com.fktm.app.ujing.net.WasherStatus
 import com.fktm.app.ujing.net.canRebuildAfterMissingPayment
+import com.fktm.app.ujing.net.isTrustedAlipayDeepLink
 import com.fktm.app.ujing.net.optionalNumericId
 import com.fktm.app.ujing.net.paymentChooseSign
 import com.fktm.app.ujing.net.paymentOrderDisposition
@@ -86,6 +87,30 @@ class UjingModelsTest {
         assertEquals(validOrderInfo().length, parsed.payloadLength)
         assertEquals("payInfo.orderInfo", parsed.sourcePath)
         assertTrue(parsed.responseKeys.contains("payInfo.orderInfo"))
+    }
+
+    @Test
+    fun parsesOfficialAlipayF2FDeepLinkFromTopLevelUrl() {
+        val link = "alipays://platformapi/startapp?appId=2021000000000000&url=encoded"
+        val parsed = parsePayArguments(
+            UjingJson.parseToJsonElement("""{"url":"$link"}""")
+        )
+
+        assertEquals(link, parsed.rawPaymentValue)
+        assertEquals(PaymentPayloadKind.APP_SCHEME, parsed.payloadKind)
+        assertEquals("url", parsed.sourcePath)
+        assertEquals("alipays://platformapi/startapp", parsed.safeValueHint)
+        assertTrue(isTrustedAlipayDeepLink(link))
+    }
+
+    @Test
+    fun rejectsUntrustedAlipayLikeSchemes() {
+        assertTrue(isTrustedAlipayDeepLink("alipays://platformapi/startapp?x=1"))
+        assertTrue(isTrustedAlipayDeepLink("alipay://platformapi/startApp?x=1"))
+        assertFalse(isTrustedAlipayDeepLink("alipays://evil.example/startapp?x=1"))
+        assertFalse(isTrustedAlipayDeepLink("alipays://platformapi/other?x=1"))
+        assertFalse(isTrustedAlipayDeepLink("other://platformapi/startapp?x=1"))
+        assertFalse(isTrustedAlipayDeepLink("https://platformapi/startapp?x=1"))
     }
 
     @Test
@@ -178,7 +203,7 @@ class UjingModelsTest {
     }
 
     @Test
-    fun rejectsAlipayF2FBecauseItIsNotTheSdkChannel() {
+    fun usesAlipayF2FOnlyAsDeepLinkFallback() {
         val selected = preferredAlipayChannel(
             listOf(
                 PayChannel(channel = "alipayF2F", isDefault = true),
@@ -186,7 +211,9 @@ class UjingModelsTest {
             )
         )
 
-        assertEquals(null, selected)
+        assertEquals("alipayF2F", selected?.channel)
+        assertFalse(selected?.alipaySdkCompatible == true)
+        assertTrue(selected?.alipayDeepLinkCompatible == true)
     }
 
     @Test

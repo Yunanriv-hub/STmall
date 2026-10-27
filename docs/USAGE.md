@@ -1,6 +1,6 @@
 # Cumpus 使用教程
 
-本文适用于 Cumpus `0.6.9` 及之后的版本。
+本文适用于 Cumpus `0.6.10` 及之后的版本。
 
 > STmall 是非官方个人项目。请只使用自己的账号，并只操作自己有权使用的
 > 门锁、饮水和校园设施。完整责任边界见 [免责声明](../DISCLAIMER.md)。
@@ -151,6 +151,9 @@ STmall 底部“我的”。慧生活页面使用与 STmall 相同的主题模�
 
 U净登录 Token、设备二维码与 MAC 地址使用 Android Keystore AES-GCM 加密保存。
 支付和实际启动仍受 U净服务端、设备状态和支付宝流程影响。
+如果当前账号只提供 `alipayF2F`，Cumpus 会在校验官方
+`alipays://platformapi/startapp` 跳转后交给支付宝打开；从支付宝或桌面返回
+Cumpus 时会自动查询订单状态。跳转成功不代表已扣款，最终以 U净状态为准。
 
 ### 胖乖生活
 

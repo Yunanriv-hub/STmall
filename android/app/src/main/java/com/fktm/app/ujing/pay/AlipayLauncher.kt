@@ -2,18 +2,25 @@ package com.fktm.app.ujing.pay
 
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import com.alipay.sdk.app.PayTask
+import com.fktm.app.ujing.net.isTrustedAlipayDeepLink
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
  * 支付宝支付客户端封装（官方 SDK，非复用 U净 的）。
  *
- * U净 的支付链路是「服务端签 orderStr → 客户端唤起支付宝」：
+ * U净 有两条支付宝链路：
  * ```
  * GET /api/v1/payment/arguments?channel=alipay&orderId=...&payVersion=1
  *   → { payInfo: { orderInfo: "app_id=...&biz_content=...&sign=..." } }
  *   → PayTask.pay(orderInfo)
+ *
+ * GET /api/v1/payment/arguments?channel=alipayF2F&...
+ *   → { url: "alipays://platformapi/startapp?..." }
+ *   → 校验 scheme 后交给支付宝官方 App
  * ```
  *
  * 关键事实：orderInfo 自带 U净 商户的 `app_id` 与 RSA2 签名，
@@ -38,6 +45,16 @@ object AlipayLauncher {
         context.packageManager.getPackageInfo(ALIPAY_PACKAGE, 0)
         true
     }.getOrDefault(false)
+
+    /**
+     * 将官方 `alipays://platformapi/startapp` 跳转固定交给支付宝包。
+     * 不使用 `Intent.parseUri`，避免 selector/component/extra 注入。
+     */
+    fun deepLinkIntent(raw: String): Intent {
+        require(isTrustedAlipayDeepLink(raw)) { "不是可信的支付宝官方跳转" }
+        return Intent(Intent.ACTION_VIEW, Uri.parse(raw.trim()))
+            .setPackage(ALIPAY_PACKAGE)
+    }
 
     /**
      * 唤起支付宝收银台。

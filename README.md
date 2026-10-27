@@ -187,16 +187,16 @@ android/app/build/outputs/apk/release/app-release.apk
 
 | 项目 | 值 |
 |---|---|
-| 版本 | `0.6.9` |
-| versionCode | `34` |
+| 版本 | `0.6.10` |
+| versionCode | `35` |
 | 包名 | `com.rea.campuslite` |
 | minSdk | `26` |
 | targetSdk | `36` |
-| Release APK | `Cumpus_0.6.9.apk` |
-| SHA-256 | `E6387A2A2C17E91F81405B550F4CC8AFD7A67A47655047E2016F0F013F77BE06` |
+| Release APK | `Cumpus_0.6.10.apk` |
+| SHA-256 | `175F5CF43D0EAFE4BDEDCAB4CCF29CEE9D7678117C717ED873A7EBBFF8574671` |
 
-该版本已通过 293 项 JVM 单元测试、release 编译、Android Lint 关键检查和
-v2 签名校验。
+该版本已通过 295 项 JVM 单元测试、release 编译、Android Lint（0 Error，
+88 个既有 Warning）和 v2 签名校验。
 
 ## 兼容性说明
 
@@ -206,6 +206,8 @@ v2 签名校验。
   首页布局、主题切换、底部导航、模块开关和官方页面跳转。
 - 已在 OnePlus PLQ110 上验证 STmall 首页、慧生活主页、登录页、NFC 页面和
   NFC 设备编号回填流程；实际标签写入仍需使用本人 NFC 标签验证。
+- 已在 OnePlus PLQ110、Android 16 上验证 U净 `alipayF2F` 可以进入支付宝
+  “确认订单”页，并验证返回 App 后自动查询订单状态；未确认付款或扣款。
 - 使用系统字体缩放 1.3 验证过文字不重叠、不被截断。
 - 已在 OPPO PGGM10 真机验证胖乖生活登录页、首页双扫码模块、扫描页单按钮、
   慧生活底栏来源、玻璃弹窗以及功能页/我的页四张卡片对齐。

@@ -34,6 +34,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -51,6 +52,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.fktm.app.FktmApp
 import com.fktm.app.R
 import com.fktm.app.scan.DeviceScanActivity
@@ -170,6 +174,33 @@ fun UjingFeatureScreen(
     }
 
     val activity = context as? Activity
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) vm.onExternalPaymentReturned()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    val pendingAlipayDeepLink by vm.pendingAlipayDeepLink.collectAsState()
+    val alipayDeepLinkLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        vm.onExternalPaymentReturned()
+    }
+    LaunchedEffect(pendingAlipayDeepLink) {
+        val deepLink = pendingAlipayDeepLink ?: return@LaunchedEffect
+        vm.consumePendingAlipayDeepLink()
+        if (!AlipayLauncher.isInstalled(context)) {
+            vm.onAlipayDeepLinkLaunchFailed("未安装支付宝")
+            return@LaunchedEffect
+        }
+        runCatching {
+            alipayDeepLinkLauncher.launch(AlipayLauncher.deepLinkIntent(deepLink))
+        }.onFailure {
+            vm.onAlipayDeepLinkLaunchFailed(it.message ?: "系统未响应支付跳转")
+        }
+    }
     val pendingOrderInfo by vm.pendingOrderInfo.collectAsState()
     LaunchedEffect(pendingOrderInfo) {
         val info = pendingOrderInfo ?: return@LaunchedEffect

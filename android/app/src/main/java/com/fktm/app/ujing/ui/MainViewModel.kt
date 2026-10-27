@@ -38,6 +38,7 @@ import com.fktm.app.ujing.net.ScanResult
 import com.fktm.app.ujing.net.UjingApi
 import com.fktm.app.ujing.net.WasherStatus
 import com.fktm.app.ujing.net.canRebuildAfterMissingPayment
+import com.fktm.app.ujing.net.isTrustedAlipayDeepLink
 import com.fktm.app.ujing.net.paymentOrderDisposition
 import com.fktm.app.ujing.net.paymentChooseSign
 import com.fktm.app.ujing.net.parsePayArguments
@@ -127,6 +128,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     private val _pendingOrderInfo = MutableStateFlow<String?>(null)
     val pendingOrderInfo = _pendingOrderInfo.asStateFlow()
+
+    /** `alipayF2F` 返回的官方 App 跳转；只保存在内存中，不写日志或磁盘。 */
+    private val _pendingAlipayDeepLink = MutableStateFlow<String?>(null)
+    val pendingAlipayDeepLink = _pendingAlipayDeepLink.asStateFlow()
+
+    private val _awaitingExternalPayment = MutableStateFlow(false)
 
     /**
      * 订单已付款、但还没启动洗衣机。
@@ -318,6 +325,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             _deviceSnapshots.value = emptyMap()
             _myOrders.value = emptyList()
             _pendingOrderInfo.value = null  // 防止退出后残留支付串触发支付宝
+            _pendingAlipayDeepLink.value = null
+            _awaitingExternalPayment.value = false
             _paying.value = false
             invalidatePayChannelCache()
             paymentRequestGate.reset()
@@ -1007,7 +1016,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 "channels=${list.joinToString(",") { it.channel }}"
         )
         selected?.let {
-            log("选择 PayTask 渠道：channel=${it.channel} branchType=${it.branchType}")
+            val mode = when {
+                it.alipaySdkCompatible -> "PayTask"
+                it.alipayDeepLinkCompatible -> "AppDeepLink"
+                else -> "unsupported"
+            }
+            log("选择支付宝渠道：channel=${it.channel} mode=$mode branchType=${it.branchType}")
         }
         return selected
     }
@@ -1127,7 +1141,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val result = requestPayArguments(oid, channel)
                 val data = parsePayArguments(result.envelope.data)
                 logPaymentArguments(channel, data, result, resolution.refreshed)
-                if (consumePaymentArguments(oid, data)) return@launch
+                if (consumePaymentArguments(oid, channel, data)) return@launch
 
                 val latestLookup = queryPaymentOrder(oid)
                 if (latestLookup is PaymentOrderLookup.Failed) {
@@ -1278,6 +1292,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun consumePaymentArguments(
         orderId: String,
+        channel: PayChannel,
         data: PayArgumentsData,
     ): Boolean {
         when {
@@ -1303,6 +1318,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 _pendingOrderInfo.value = data.orderStr
                 return true
             }
+            channel.alipayDeepLinkCompatible && data.rawPaymentValue.isNotBlank() -> {
+                log(
+                    "取到支付宝 App 跳转参数：kind=${data.payloadKind} " +
+                        "length=${data.payloadLength} hint=${data.safeValueHint}"
+                )
+                if (!isTrustedAlipayDeepLink(data.rawPaymentValue)) {
+                    log("拒绝非支付宝官方的自定义跳转")
+                    _toast.value = "服务端返回的支付宝跳转无法验证，已停止打开"
+                    return true
+                }
+                _pendingAlipayDeepLink.value = data.rawPaymentValue
+                _awaitingExternalPayment.value = true
+                _toast.value = "正在打开支付宝收银台"
+                return true
+            }
         }
         return false
     }
@@ -1312,9 +1342,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             it.channel.equals("alipayF2F", ignoreCase = true)
         }
         return if (f2f) {
-            "当前订单仅提供支付宝网页收银台，此方式尚未实现，请使用官方 U净完成支付"
+            "当前订单的支付宝渠道暂不可用，请稍后刷新重试"
         } else {
-            "当前订单未提供可用的支付宝 SDK 支付方式"
+            "当前订单未提供可用的支付宝支付方式"
         }
     }
 
@@ -1327,7 +1357,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             PaymentPayloadKind.NONE ->
                 data.payloadReason.ifBlank { "服务端未返回支付参数" }
             PaymentPayloadKind.URL ->
-                "服务端返回网页支付地址，当前 App 不支持此支付方式"
+                "服务端返回了其他网页支付地址，当前订单不能安全打开"
+            PaymentPayloadKind.APP_SCHEME ->
+                "服务端返回了未支持的应用跳转，当前订单不能安全打开"
             PaymentPayloadKind.JSON_OBJECT ->
                 "服务端返回 JSON，但未提供官方 payInfo.orderInfo SDK 支付串"
             PaymentPayloadKind.QR_OR_TEXT ->
@@ -1358,6 +1390,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 "chooseSign=${paymentChooseSign(channel) ?: "omitted"} " +
                 "refreshed=$channelsRefreshed source=${data.sourcePath.ifBlank { "-" }} " +
                 "kind=${data.payloadKind} payLength=${data.payloadLength} " +
+                "safeValue=${data.safeValueHint.ifBlank { "-" }} " +
                 "skipPay=${data.skipPay} jumpToQuery=${data.jumpToQuery} " +
                 "payFlag=${data.payFlag} isPaid=${data.isPaid} fields=$fields"
         )
@@ -1399,13 +1432,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun safeDiagnosticText(value: String?, limit: Int): String =
         value.orEmpty()
-            .replace(Regex("""https?://\S+"""), "[url]")
+            .replace(Regex("""(?i)\b[a-z][a-z0-9+.-]*://\S+"""), "[url]")
             .take(limit)
 
     /** UI 层唤起支付宝后的结果回传。 */
     fun onPayResult(resultStatus: String, memo: String) {
         val oid = _orderId.value
-        log("支付宝返回 resultStatus=$resultStatus memo=$memo")
+        log("支付宝返回 resultStatus=$resultStatus memo=${safeDiagnosticText(memo, 120)}")
         viewModelScope.launch {
             when (resultStatus) {
                 "9000" -> {
@@ -1429,22 +1462,64 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun consumePendingOrderInfo() { _pendingOrderInfo.value = null }
 
+    fun consumePendingAlipayDeepLink() { _pendingAlipayDeepLink.value = null }
+
+    fun onAlipayDeepLinkLaunchFailed(message: String) {
+        _pendingAlipayDeepLink.value = null
+        _awaitingExternalPayment.value = false
+        _paying.value = false
+        _busy.value = null
+        log("打开支付宝失败：${safeDiagnosticText(message, 160)}")
+        _toast.value = "无法打开支付宝：${message.take(80)}"
+    }
+
+    /** 从支付宝返回时不能把 resultCode 当成付款结果，必须向 U净查询订单状态。 */
+    fun onExternalPaymentReturned() {
+        if (!_awaitingExternalPayment.compareAndSet(expect = true, update = false)) return
+        val oid = _orderId.value
+        log("从支付宝返回，开始确认订单支付状态")
+        if (oid.isBlank()) {
+            _toast.value = "暂无待确认订单"
+            return
+        }
+        paymentRequestGate.finish()
+        _paying.value = true
+        _toast.value = "已返回 Cumpus，正在确认支付结果"
+        viewModelScope.launch {
+            try {
+                pollPayStatus(oid)
+            } finally {
+                _paying.value = false
+                _busy.value = null
+            }
+        }
+    }
+
     /** 轮询支付结果，最多 5 次 × 1.5s。 */
     private suspend fun pollPayStatus(orderId: String) {
+        var lastError: Throwable? = null
         repeat(5) { i ->
             val ok = runCatching { api.lastPayStatus(orderId) }
-                .onFailure { log("查支付状态失败：${it.message}") }
+                .onFailure {
+                    lastError = it
+                    log("查支付状态失败：${safeDiagnosticText(it.message, 160)}")
+                }
                 .getOrNull()?.data?.success == true
             if (ok) {
                 log("支付状态确认为成功（第 ${i + 1} 次查询）")
                 _toast.value = "支付成功"
+                _paid.value = true
                 refreshOrder(orderId)
                 return
             }
             kotlinx.coroutines.delay(1500)
         }
-        _toast.value = "支付结果未确认，可稍后扫一次码刷新"
         refreshOrder(orderId)
+        _toast.value = if (lastError != null) {
+            "暂时无法确认支付结果，请稍后刷新订单"
+        } else {
+            "支付结果尚未确认，请稍后刷新订单"
+        }
     }
 
     // -----------------------------------------------------------------

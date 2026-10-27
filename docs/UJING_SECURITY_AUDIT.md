@@ -14,8 +14,10 @@
 
 - 手机号、短信验证码、U净 Token、设备二维码、deviceId、MAC、订单号和
   BLE 上报数据会发送到 `https://phoenix.ujing.online`。
-- 支付阶段由 U净服务端签发支付宝订单串，再交给支付宝官方 SDK；STmall
-  不经手支付资金，也不持久化订单串。
+- 支付阶段由 U净服务端签发支付宝订单串或
+  `alipays://platformapi/startapp` 官方跳转；SDK 串交给支付宝 SDK，跳转地址
+  经 scheme/host/path 白名单校验后固定交给支付宝官方包。STmall 不经手支付
+  资金，也不持久化支付串或跳转地址。
 - QR 校验只接受 `q.ujing.com.cn` 和 `app.littleswan.com` 的设备码。
 - 上游 App 均读取相机、蓝牙和账户信息。`ujing-mini` 使用明文 DataStore，
   `DUT-Ujing` 使用明文 SharedPreferences；STmall 接入时改为 Android
