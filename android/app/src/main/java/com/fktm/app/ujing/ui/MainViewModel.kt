@@ -30,6 +30,7 @@ import com.fktm.app.ujing.net.ProgramInfo
 import com.fktm.app.ujing.net.ScanResult
 import com.fktm.app.ujing.net.UjingApi
 import com.fktm.app.ujing.net.WasherStatus
+import com.fktm.app.ujing.net.paymentChooseSign
 import com.fktm.app.ujing.net.parsePayArguments
 import com.fktm.app.ujing.net.preferredAlipayChannel
 
@@ -1039,9 +1040,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             channel = channel.channel,
             orderId = orderId,
             payVersion = 1,
-            chooseSign = if (channel.signCapable) 1 else 0,
+            // 对齐官方 cashierNew.js：未签约时完全不发送 chooseSign，
+            // 发送 0 会进入错误的支付分支，服务端返回成功但没有 payInfo。
+            chooseSign = paymentChooseSign(channel),
             branchType = channel.branchType,
             jumpToAliMini = false,
+            // 官方未使用红包时发送整数 0，而不是省略或发送空串。
+            redPacketId = "0",
         )
         return parsePayArguments(env.data)
     }

@@ -8,6 +8,7 @@ import com.fktm.app.ujing.net.UjingJson
 import com.fktm.app.ujing.net.UjingApi
 import com.fktm.app.ujing.net.WasherStatus
 import com.fktm.app.ujing.net.optionalNumericId
+import com.fktm.app.ujing.net.paymentChooseSign
 import com.fktm.app.ujing.net.parsePayArguments
 import com.fktm.app.ujing.net.preferredAlipayChannel
 import org.junit.Assert.assertFalse
@@ -135,6 +136,7 @@ class UjingModelsTest {
         assertEquals(null, optionalNumericId(""))
         assertEquals(null, optionalNumericId("  "))
         assertEquals(null, optionalNumericId("red-packet"))
+        assertEquals("0", optionalNumericId("0"))
         assertEquals("123456", optionalNumericId(" 123456 "))
     }
 
@@ -145,6 +147,17 @@ class UjingModelsTest {
         )
         assertFalse(
             UjingApi.ApiException(500, "server error").isDuplicatePaymentRequest
+        )
+    }
+
+    @Test
+    fun omitsChooseSignUntilPaymentIsSigned() {
+        assertEquals(null, paymentChooseSign(PayChannel(channel = "alipay")))
+        assertEquals(
+            1,
+            paymentChooseSign(
+                PayChannel(channel = "alipay", isPaymentSignAgreen = true)
+            )
         )
     }
 }

@@ -554,6 +554,10 @@ fun preferredAlipayChannel(channels: List<PayChannel>): PayChannel? {
         ?: usable.firstOrNull { it.channel.equals("alipayF2F", ignoreCase = true) }
 }
 
+/** 官方收银台只在已签约时发送 `chooseSign=1`；未签约时必须省略。 */
+fun paymentChooseSign(channel: PayChannel): Int? =
+    if (channel.signCapable) 1 else null
+
 /**
  * 把服务端可能返回的支付参数形态归一化。
  *

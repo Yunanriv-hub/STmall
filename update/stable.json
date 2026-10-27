@@ -1,10 +1,10 @@
 {
   "channel": "stable",
-  "versionName": "0.6.6",
-  "versionCode": 31,
+  "versionName": "0.6.7",
+  "versionCode": 32,
   "isReady": false,
   "minVersionCode": 1,
-  "releaseNotes": "Cumpus 0.6.6：修复 U净支付参数接口返回 6020208 重复请求；支付改为单次请求，并阻止按钮连点、重复下单和网络层自动重发。项目继续只通过本地 APK 分发。",
+  "releaseNotes": "Cumpus 0.6.7：对照 U净官方 2.4.18 收银台修正 chooseSign 与 redPacketId 参数，修复支付接口成功但不返回 payInfo 的问题，并保留单次请求、防连点和防自动重发。项目继续只通过本地 APK 分发。",
   "releaseUrl": "",
   "assets": []
 }
