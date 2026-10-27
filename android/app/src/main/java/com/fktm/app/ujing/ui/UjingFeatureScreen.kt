@@ -675,6 +675,7 @@ private fun WashAction(vm: MainViewModel) {
     val orderId by vm.orderId.collectAsState()
     val order by vm.order.collectAsState()
     val paid by vm.paid.collectAsState()
+    val paying by vm.paying.collectAsState()
     val starting by vm.starting.collectAsState()
     val tick by vm.tick.collectAsState()
     val fetchedAt by vm.orderFetchedAt.collectAsState()
@@ -717,9 +718,16 @@ private fun WashAction(vm: MainViewModel) {
 
         hasOrder -> Button(
             onClick = vm::startPay,
+            enabled = !paying,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("继续支付订单")
+            if (paying) {
+                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(8.dp))
+                Text("正在生成支付参数")
+            } else {
+                Text("继续支付订单")
+            }
         }
 
         scan?.createOrderEnabled == false -> {
@@ -733,17 +741,22 @@ private fun WashAction(vm: MainViewModel) {
 
         else -> Button(
             onClick = vm::payAndWash,
-            enabled = model != null,
+            enabled = model != null && !paying,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(
-                if (model == null) "请先选择洗衣模式"
+                if (paying) "正在准备支付"
+                else if (model == null) "请先选择洗衣模式"
                 else "支付 ¥%.2f · 开洗".format(model.displayPriceCents / 100.0)
             )
         }
     }
     if (hasOrder && !inProgress && !starting) {
-        TextButton(onClick = vm::cancelOrder, modifier = Modifier.fillMaxWidth()) {
+        TextButton(
+            onClick = vm::cancelOrder,
+            enabled = !paying,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
             Text("取消当前订单")
         }
     }

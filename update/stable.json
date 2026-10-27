@@ -1,10 +1,10 @@
 {
   "channel": "stable",
-  "versionName": "0.6.5",
-  "versionCode": 30,
+  "versionName": "0.6.6",
+  "versionCode": 31,
   "isReady": false,
   "minVersionCode": 1,
-  "releaseNotes": "Cumpus 0.6.5：修复 U净支付接口因空 redPacketId 返回 HTTP 500 的问题；未使用红包或优惠券时不再发送空优惠 ID，并保留续付渠道恢复与支付参数兼容修复。项目继续只通过本地 APK 分发。",
+  "releaseNotes": "Cumpus 0.6.6：修复 U净支付参数接口返回 6020208 重复请求；支付改为单次请求，并阻止按钮连点、重复下单和网络层自动重发。项目继续只通过本地 APK 分发。",
   "releaseUrl": "",
   "assets": []
 }

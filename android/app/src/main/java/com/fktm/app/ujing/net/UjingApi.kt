@@ -45,9 +45,20 @@ class UjingApi {
         .retryOnConnectionFailure(true)
         .build()
 
+    /**
+     * `payment/arguments` 会创建服务端支付会话，属于非幂等 GET。
+     * OkHttp 默认可能自动重发 GET；这里禁用网络层重试，避免服务端返回 6020208。
+     */
+    private val nonRetryClient = client.newBuilder()
+        .retryOnConnectionFailure(false)
+        .build()
+
     private val jsonMedia = "application/json; charset=utf-8".toMediaType()
 
-    class ApiException(val code: Int, message: String) : IOException(message)
+    class ApiException(val code: Int, message: String) : IOException(message) {
+        /** U净支付参数重复请求。 */
+        val isDuplicatePaymentRequest: Boolean get() = code == 6020208
+    }
 
     // -----------------------------------------------------------------
     // 基础请求
@@ -77,7 +88,8 @@ class UjingApi {
             "DELETE" -> builder.delete()
             else -> error("unsupported method $method")
         }
-        client.newCall(builder.build()).execute().use { resp ->
+        val httpClient = if (path == "/api/v1/payment/arguments") nonRetryClient else client
+        httpClient.newCall(builder.build()).execute().use { resp ->
             val text = resp.body?.string().orEmpty()
             if (text.isBlank()) {
                 if (resp.isSuccessful) return@withContext "{}"

@@ -137,4 +137,14 @@ class UjingModelsTest {
         assertEquals(null, optionalNumericId("red-packet"))
         assertEquals("123456", optionalNumericId(" 123456 "))
     }
+
+    @Test
+    fun recognizesDuplicatePaymentRequestError() {
+        assertTrue(
+            UjingApi.ApiException(6020208, "请勿重复请求").isDuplicatePaymentRequest
+        )
+        assertFalse(
+            UjingApi.ApiException(500, "server error").isDuplicatePaymentRequest
+        )
+    }
 }

@@ -161,6 +161,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _busy = MutableStateFlow<String?>(null)
     val busy = _busy.asStateFlow()
 
+    /** 支付参数请求进行中。UI 用它禁用按钮，ViewModel 用它阻止连点。 */
+    private val _paying = MutableStateFlow(false)
+    val paying = _paying.asStateFlow()
+
+    /** 服务端返回 6020208 后的短暂冷却截止时刻。 */
+    private var payDuplicateBlockedUntil = 0L
+    private var createOrderInFlight = false
+
     private val _toast = MutableStateFlow<String?>(null)
     val toast = _toast.asStateFlow()
 
@@ -282,6 +290,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             _myOrders.value = emptyList()
             _payChannels.value = emptyList()
             _pendingOrderInfo.value = null  // 防止退出后残留支付串触发支付宝
+            _paying.value = false
+            payDuplicateBlockedUntil = 0L
             store.saveOrderId("")
         }
     }
@@ -312,6 +322,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         _deviceRemain.value = null
                         _deviceRemainAt.value = 0
                         _orderFetchedAt.value = 0
+                        payDuplicateBlockedUntil = 0L
                         if (r.orderId > 0) {
                             _orderId.value = r.orderId.toString()
                             store.saveOrderId(r.orderId.toString())
@@ -802,6 +813,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val p = _program.value
         val m = selectedModel()
         if (!d.valid || p == null || m == null) { _toast.value = "请先扫码并选择模式"; return }
+        if (createOrderInFlight) {
+            log("忽略重复下单请求：订单正在创建")
+            return
+        }
+        createOrderInFlight = true
         viewModelScope.launch {
             _busy.value = "正在下单"
             runCatching {
@@ -820,6 +836,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         _toast.value = "下单失败：无订单号"
                     } else {
                         _orderId.value = order.orderId
+                        payDuplicateBlockedUntil = 0L
                         store.saveOrderId(order.orderId)
                         _toast.value = "下单成功 ${order.orderId}（待支付）"
                         val merged = d.copy(macAddress = order.macAddress.ifBlank { d.macAddress })
@@ -831,6 +848,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
                 .onFailure { error(it) }
+            createOrderInFlight = false
             _busy.value = null
         }
     }
@@ -854,6 +872,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     _order.value = null
                     _paid.value = false
                     _startedAt.value = 0
+                    payDuplicateBlockedUntil = 0L
                     _payChannels.value = emptyList()
                     _deviceRemain.value = null
                     store.saveOrderId("")
@@ -946,6 +965,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * 把按钮切成「启动洗衣机」—— 启动这一步留给用户手动点，避免误触开机。
      */
     fun payAndWash() {
+        if (_paying.value) {
+            log("忽略一键开洗连点：支付参数正在准备")
+            return
+        }
         if (_orderId.value.isNotBlank()) startPay() else createOrder(thenPay = true)
     }
 
@@ -960,20 +983,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun startPay() {
         val oid = _orderId.value
         if (oid.isBlank()) { _toast.value = "请先下单"; return }
+        if (_paying.value) {
+            log("忽略支付按钮连点：已有支付参数请求正在进行")
+            return
+        }
+        val now = System.currentTimeMillis()
+        if (now < payDuplicateBlockedUntil) {
+            val seconds = ((payDuplicateBlockedUntil - now + 999) / 1_000).coerceAtLeast(1)
+            _toast.value = "支付请求正在处理，请等待 ${seconds} 秒后再试"
+            return
+        }
+        _paying.value = true
         viewModelScope.launch {
             _busy.value = "正在准备支付"
             try {
                 val channel = ensureAlipayChannel(oid)
                     ?: throw IllegalStateException("当前订单未提供支付宝支付渠道")
 
-                // 先按官方收银台的完整参数请求，再回退到最小参数，兼容服务端灰度差异。
-                val complete = requestPayArguments(oid, channel, completeParams = true)
+                // 支付参数接口是非幂等 GET，同一个订单只请求一次。
+                val complete = requestPayArguments(oid, channel)
                 if (consumePaymentArguments(oid, complete)) return@launch
                 logPayArgumentsMissing("complete", channel, complete)
-
-                val minimal = requestPayArguments(oid, channel, completeParams = false)
-                if (consumePaymentArguments(oid, minimal)) return@launch
-                logPayArgumentsMissing("minimal", channel, minimal)
 
                 val latest = runCatching { api.orderDetail(oid).data }.getOrNull()
                 if (latest?.payFlag == 1) {
@@ -983,9 +1013,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     return@launch
                 }
                 _toast.value = "已刷新支付渠道，但服务端仍未返回支付宝参数，请稍后重试"
+            } catch (e: UjingApi.ApiException) {
+                if (e.isDuplicatePaymentRequest) {
+                    payDuplicateBlockedUntil = System.currentTimeMillis() + 10_000L
+                    log("支付参数重复请求（6020208），进入 10 秒冷却并刷新订单")
+                    _toast.value = "支付请求正在处理，请等待 10 秒后再试"
+                    refreshOrder(oid)
+                } else {
+                    error(e)
+                }
             } catch (it: Throwable) {
                 error(it)
             } finally {
+                _paying.value = false
                 _busy.value = null
             }
         }
@@ -994,18 +1034,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun requestPayArguments(
         orderId: String,
         channel: PayChannel,
-        completeParams: Boolean,
     ): PayArgumentsData {
         val env = api.payArguments(
             channel = channel.channel,
             orderId = orderId,
             payVersion = 1,
-            chooseSign = if (completeParams) {
-                if (channel.signCapable) 1 else 0
-            } else {
-                null
-            },
-            branchType = if (completeParams) channel.branchType else null,
+            chooseSign = if (channel.signCapable) 1 else 0,
+            branchType = channel.branchType,
             jumpToAliMini = false,
         )
         return parsePayArguments(env.data)
