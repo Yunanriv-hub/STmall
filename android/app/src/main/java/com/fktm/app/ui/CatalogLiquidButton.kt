@@ -201,7 +201,8 @@ internal fun CatalogLiquidIconButton(
 ) {
     val backdrop = LocalLiquidGlassBackdrop.current
     val glassEnabled = LocalLiquidGlassEnabled.current
-    if (!glassEnabled || backdrop == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+    val useNativeGlass = false
+    if (!useNativeGlass || !glassEnabled || backdrop == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
         MaterialIconButton(
             onClick = onClick,
             modifier = modifier,

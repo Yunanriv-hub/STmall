@@ -1,10 +1,10 @@
 {
   "channel": "stable",
-  "versionName": "0.6.2",
-  "versionCode": 27,
+  "versionName": "0.6.3",
+  "versionCode": 28,
   "isReady": false,
   "minVersionCode": 1,
-  "releaseNotes": "Cumpus 0.6.2：恢复慧生活“添加设备”入口，并新增可直接进入饮水控制页的“设备与饮水”入口。项目继续只通过本地 APK 分发。",
+  "releaseNotes": "Cumpus 0.6.3：修复空白页与慧生活设备页闪退、NFC 返回异常、U净扫码误判、主题切换闪暗和页面转场掉帧；统一圆形返回按钮、液态玻璃弹窗与日间模式文字对比度。项目继续只通过本地 APK 分发。",
   "releaseUrl": "",
   "assets": []
 }

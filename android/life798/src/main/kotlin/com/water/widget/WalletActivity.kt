@@ -26,7 +26,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.AccountBalanceWallet
-import androidx.compose.material3.AlertDialog
+import com.water.widget.ui.HuishengGlassAlertDialog as AlertDialog
 import com.water.widget.ui.CatalogLiquidButton as Button
 import com.water.widget.ui.HuishengGlassCard as Card
 import androidx.compose.material3.CardDefaults

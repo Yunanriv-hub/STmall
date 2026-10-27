@@ -60,6 +60,7 @@ import com.fktm.app.ui.CatalogLiquidIconButton as IconButton
 import com.fktm.app.ui.CatalogLiquidOutlinedButton as OutlinedButton
 import com.fktm.app.ui.CatalogLiquidSwitch
 import com.fktm.app.ui.CatalogLiquidTextButton as TextButton
+import com.fktm.app.ui.CumpusRoundBackButton
 import com.fktm.app.ui.LiquidGlassPanel
 import com.fktm.app.ujing.data.SavedDevice
 import com.fktm.app.ujing.data.UjingDeviceSnapshot
@@ -368,7 +369,7 @@ private fun UjingHeader(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                TextButton(onClick = onBack) { Text("‹ 返回") }
+                CumpusRoundBackButton(onBack = onBack)
                 Column(Modifier.weight(1f)) {
                     Text("U净", fontSize = 21.sp, fontWeight = FontWeight.Bold)
                     Text(

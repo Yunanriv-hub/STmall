@@ -41,6 +41,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fktm.app.ui.CatalogLiquidButton as Button
 import com.fktm.app.ui.CatalogLiquidOutlinedButton as OutlinedButton
 import com.fktm.app.ui.CatalogLiquidTextButton as TextButton
+import com.fktm.app.ui.CumpusRoundBackButton
 import com.fktm.app.ui.LiquidGlassPanel
 
 @Composable
@@ -190,7 +191,7 @@ private fun PangguaiHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            TextButton(onClick = onBack) { Text("‹ 返回") }
+            CumpusRoundBackButton(onBack = onBack)
             Column(Modifier.weight(1f)) {
                 Text("胖乖生活", fontSize = 21.sp, fontWeight = FontWeight.Bold)
                 Text(

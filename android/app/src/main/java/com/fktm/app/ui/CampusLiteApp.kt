@@ -11,7 +11,6 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.expandVertically
@@ -21,15 +20,11 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -60,8 +55,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import com.fktm.app.ui.CatalogLiquidButton as Button
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import com.fktm.app.ui.CatalogLiquidFilterChip as FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -111,7 +104,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -136,6 +128,7 @@ import com.fktm.app.ujing.ui.UjingFeatureScreen
 import com.fktm.app.vm.UnlockViewModel
 import com.fktm.app.vm.UnlockState
 import com.fktm.app.vm.WaterViewModel
+import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.kyant.backdrop.drawBackdrop
@@ -395,31 +388,48 @@ fun CampusLiteApp(
 
     val showTopActions = page.depth == 0
     val showBottomBar = page != CampusPage.Settings
-    val glassBackdrop = rememberLayerBackdrop()
+    val pageEntry = remember { Animatable(1f) }
+    var lastAnimatedPage by remember { mutableStateOf<CampusPage?>(null) }
+    LaunchedEffect(page) {
+        if (
+            lastAnimatedPage != null &&
+            lastAnimatedPage != page &&
+            ValueAnimator.areAnimatorsEnabled()
+        ) {
+            pageEntry.snapTo(0.74f)
+            pageEntry.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(170, easing = FastOutSlowInEasing),
+            )
+        } else {
+            pageEntry.snapTo(1f)
+        }
+        lastAnimatedPage = page
+    }
+    /*
+     * Export only the static background. Controls can then blur the ambient
+     * layer without recursively sampling the entire glass page.
+     */
     val backgroundBackdrop = rememberLayerBackdrop()
 
     CompositionLocalProvider(
-        LocalLiquidGlassBackdrop provides glassBackdrop,
+        LocalLiquidGlassBackdrop provides backgroundBackdrop,
         LocalLiquidGlassEnabled provides glassEnabled,
     ) {
         Box(Modifier.fillMaxSize()) {
             Box(
-                Modifier
-                    .fillMaxSize()
-                    .then(
-                        if (glassEnabled) Modifier.layerBackdrop(glassBackdrop) else Modifier
-                    )
+                Modifier.fillMaxSize()
             ) {
                 Box(
                     Modifier
                         .fillMaxSize()
-                            .then(
-                                if (glassEnabled) {
-                                    Modifier.layerBackdrop(backgroundBackdrop)
-                                } else {
-                                    Modifier
-                                }
-                            )
+                        .then(
+                            if (glassEnabled) {
+                                Modifier.layerBackdrop(backgroundBackdrop)
+                            } else {
+                                Modifier
+                            }
+                        )
                         .background(MaterialTheme.colorScheme.background)
                 ) {
                     BackgroundImageLayer(
@@ -443,56 +453,30 @@ fun CampusLiteApp(
                     containerColor = Color.Transparent,
                     contentColor = MaterialTheme.colorScheme.onBackground,
                     topBar = {},
-                    bottomBar = {
-                        Spacer(
-                            Modifier
-                                .fillMaxWidth()
-                                .navigationBarsPadding()
-                                .height(80.dp)
-                        )
-                    },
                     ) { innerPadding ->
                         Box(
                             Modifier
                                 .fillMaxSize()
-                                .padding(innerPadding),
-                        ) {
-                            AnimatedContent(
-                                targetState = page,
-                                transitionSpec = {
-                                    val animationsEnabled =
-                                        ValueAnimator.areAnimatorsEnabled()
-                                    if (animationsEnabled && initialState != targetState) {
-                                        val isTopLevelSwitch =
-                                            initialState.depth == 0 && targetState.depth == 0
-                                        val movingForward = if (isTopLevelSwitch) {
-                                            when {
-                                                initialState == CampusPage.Home -> true
-                                                targetState == CampusPage.Home -> false
-                                                initialState == CampusPage.Features -> true
-                                                else -> false
-                                            }
-                                        } else {
-                                            targetState.depth > initialState.depth
-                                        }
-                                        val direction = if (movingForward) 1 else -1
-                                        val offsetSpec = spring<IntOffset>(
-                                            dampingRatio = 1f,
-                                            stiffness = 520f,
-                                        )
-                                        slideInHorizontally(offsetSpec) {
-                                            it * direction
-                                        } togetherWith slideOutHorizontally(offsetSpec) {
-                                            -it * direction
-                                        }
+                                .padding(innerPadding)
+                                .then(
+                                    if (page.depth > 0 && page != CampusPage.Settings) {
+                                        Modifier.padding(bottom = 88.dp)
                                     } else {
-                                        fadeIn(tween(if (animationsEnabled) 180 else 0)) togetherWith
-                                            fadeOut(tween(if (animationsEnabled) 120 else 0))
+                                        Modifier
                                     }
-                                },
-                                label = "campus-page-transition",
-                            ) { targetPage ->
-                            when (targetPage) {
+                                ),
+                        ) {
+                            Box(
+                                Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer {
+                                        alpha = pageEntry.value
+                                        val scale = 0.992f + pageEntry.value * 0.008f
+                                        scaleX = scale
+                                        scaleY = scale
+                                    }
+                            ) {
+                            when (page) {
                 CampusPage.Home -> CampusHome(
                     onSmartDorm = {
                         detailOrigin = CampusPage.Home
@@ -977,7 +961,7 @@ private fun FeatureHubScreen(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .statusBarsPadding()
-            .padding(top = 88.dp, start = 20.dp, end = 20.dp, bottom = 18.dp),
+            .padding(top = 88.dp, start = 20.dp, end = 20.dp, bottom = 108.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         HubPageHeader(
@@ -986,12 +970,10 @@ private fun FeatureHubScreen(
         )
 
         if (modules.isEmpty()) {
-            Card(
-                Modifier.fillMaxWidth(),
+            LiquidGlassPanel(
+                modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                ),
+                contentPadding = PaddingValues(0.dp),
             ) {
                 Column(
                     Modifier
@@ -1067,8 +1049,9 @@ private fun HubPageHeader(
         Text(title, fontSize = 28.sp, fontWeight = FontWeight.Bold)
         Text(
             subtitle,
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.76f),
         )
     }
 }
@@ -1166,12 +1149,10 @@ private fun ModuleFeatureCard(
 
 @Composable
 private fun EmptyHomeState(onOpenSettings: () -> Unit) {
-    Card(
-        Modifier.fillMaxWidth(),
+    LiquidGlassPanel(
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
+        contentPadding = PaddingValues(0.dp),
     ) {
         Column(
             Modifier
@@ -1246,22 +1227,12 @@ private fun QuickUnlockCircle(
     }
     val backdrop = LocalLiquidGlassBackdrop.current
     val glassEnabled = LocalLiquidGlassEnabled.current
-    val useNativeGlass = glassEnabled &&
-        backdrop != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val useNativeGlass = false
     val surfaceModifier = if (useNativeGlass) {
         Modifier.drawBackdrop(
             backdrop = backdrop!!,
             shape = { CircleShape },
-            effects = {
-                vibrancy()
-                blur(5.dp.toPx())
-                lens(
-                    refractionHeight = 20.dp.toPx(),
-                    refractionAmount = 36.dp.toPx(),
-                    depthEffect = true,
-                    chromaticAberration = true,
-                )
-            },
+            effects = {},
             highlight = { Highlight.Ambient.copy(alpha = 0.92f) },
             shadow = {
                 Shadow.Default.copy(
@@ -1674,22 +1645,12 @@ private fun FeatureCard(
     val shape = RoundedCornerShape(if (dense) 20.dp else 28.dp)
     val backdrop = LocalLiquidGlassBackdrop.current
     val glassEnabled = LocalLiquidGlassEnabled.current
-    val useNativeGlass = glassEnabled &&
-        backdrop != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val useNativeGlass = false
     val surfaceModifier = if (useNativeGlass) {
         Modifier.drawBackdrop(
             backdrop = backdrop!!,
             shape = { shape },
-            effects = {
-                vibrancy()
-                blur(4.dp.toPx())
-                lens(
-                    refractionHeight = 16.dp.toPx(),
-                    refractionAmount = 28.dp.toPx(),
-                    depthEffect = true,
-                    chromaticAberration = true,
-                )
-            },
+            effects = {},
             highlight = { Highlight.Ambient },
             shadow = {
                 Shadow.Default.copy(
@@ -2115,7 +2076,7 @@ private fun MyHubScreen(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .statusBarsPadding()
-            .padding(top = 88.dp, start = 20.dp, end = 20.dp, bottom = 18.dp),
+            .padding(top = 88.dp, start = 20.dp, end = 20.dp, bottom = 108.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         HubPageHeader(
@@ -2189,22 +2150,12 @@ private fun MyHubEntryCard(
     val surfaceColor = MaterialTheme.colorScheme.surface
     val backdrop = LocalLiquidGlassBackdrop.current
     val glassEnabled = LocalLiquidGlassEnabled.current
-    val useNativeGlass = glassEnabled &&
-        backdrop != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val useNativeGlass = false
     val surfaceModifier = if (useNativeGlass) {
         Modifier.drawBackdrop(
             backdrop = backdrop!!,
             shape = { shape },
-            effects = {
-                vibrancy()
-                blur(4.dp.toPx())
-                lens(
-                    refractionHeight = 16.dp.toPx(),
-                    refractionAmount = 28.dp.toPx(),
-                    depthEffect = true,
-                    chromaticAberration = true,
-                )
-            },
+            effects = {},
             highlight = { Highlight.Ambient },
             shadow = {
                 Shadow.Default.copy(
@@ -2245,13 +2196,6 @@ private fun MyHubEntryCard(
                     1f + 4.dp.toPx() / size.height.coerceAtLeast(1f),
                 )
             }
-            .shadow(
-                elevation = 16.dp,
-                shape = shape,
-                clip = false,
-                ambientColor = Color.Black.copy(alpha = 0.18f),
-                spotColor = contentColor.copy(alpha = 0.18f),
-            )
             .clip(shape)
             .background(
                 Brush.verticalGradient(
@@ -2291,7 +2235,7 @@ private fun MyHubEntryCard(
             .then(catalogInteraction.clippedModifier(shape))
             .then(catalogInteraction.gestureModifier),
     ) {
-        if (glassEnabled) {
+        if (useNativeGlass) {
             Canvas(Modifier.matchParentSize()) {
                 drawRect(
                     brush = Brush.verticalGradient(
@@ -2334,7 +2278,7 @@ private fun MyHubEntryCard(
                     title,
                     fontSize = 19.sp,
                     fontWeight = FontWeight.Bold,
-                    color = contentColor,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -2342,12 +2286,16 @@ private fun MyHubEntryCard(
                     subtitle,
                     fontSize = 12.sp,
                     lineHeight = 18.sp,
-                    color = contentColor.copy(alpha = 0.88f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.96f),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Text("›", fontSize = 28.sp, color = contentColor.copy(alpha = 0.72f))
+            Text(
+                "›",
+                fontSize = 28.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.86f),
+            )
         }
     }
 }
@@ -2459,6 +2407,7 @@ private fun ProfileScreen(
         Modifier
             .fillMaxSize()
             .statusBarsPadding()
+            .navigationBarsPadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -2615,6 +2564,7 @@ private fun SettingsScreen(
         Modifier
             .fillMaxSize()
             .statusBarsPadding()
+            .navigationBarsPadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),

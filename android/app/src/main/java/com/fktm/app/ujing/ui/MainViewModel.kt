@@ -721,7 +721,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun syncDevice() {
         val d = _device.value
-        if (!d.valid || !ModuleType.supportsBle(d.moduleType)) return
+        if (!d.bleReady || !ModuleType.supportsBle(d.moduleType)) return
         viewModelScope.launch {
             val outcome = runCatching {
                 when (d.moduleType) {
@@ -1027,6 +1027,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun startWash(command: String = NordicCommand.START_WASH) {
         val d = _device.value
         if (!d.valid) { _toast.value = "尚未绑定设备"; return }
+        if (!d.bleReady) {
+            _toast.value = "设备蓝牙地址尚未同步，请点击右上角刷新后再试"
+            log("拒绝启动：设备 ${d.deviceId} 缺少 MAC，先刷新设备详情")
+            return
+        }
         if (!ModuleType.supportsBle(d.moduleType)) {
             _toast.value = "该设备模块(${d.moduleType})不支持蓝牙直连"
             return

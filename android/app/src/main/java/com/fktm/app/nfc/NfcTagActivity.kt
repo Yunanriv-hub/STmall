@@ -48,11 +48,13 @@ class NfcTagActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
     companion object {
         const val EXTRA_RETURN_DEVICE_ID = "com.fktm.app.nfc.EXTRA_RETURN_DEVICE_ID"
         const val EXTRA_DEVICE_ID_RESULT = "com.fktm.app.nfc.EXTRA_DEVICE_ID_RESULT"
+        private const val STATE_RETURN_DEVICE_ID = "com.fktm.app.nfc.STATE_RETURN_DEVICE_ID"
     }
 
     private val io = Executors.newSingleThreadExecutor()
     private var adapter: NfcAdapter? = null
     private var pendingWriteId: String? = null
+    private var returnDeviceIdToCaller = false
     private val addDevice = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -65,16 +67,21 @@ class NfcTagActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
             nfcAvailable = true,
             nfcEnabled = false,
             status = "正在准备 NFC…",
-            autoStartEnabled = (application as FktmApp).preferences.nfcAutoStartWater,
+            autoStartEnabled = false,
         )
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        returnDeviceIdToCaller = savedInstanceState?.getBoolean(
+            STATE_RETURN_DEVICE_ID,
+            false,
+        ) == true || intent.getBooleanExtra(EXTRA_RETURN_DEVICE_ID, false)
         adapter = NfcAdapter.getDefaultAdapter(this)
         uiState = uiState.copy(
             nfcAvailable = adapter != null,
             nfcEnabled = adapter?.isEnabled == true,
+            autoStartEnabled = (application as FktmApp).preferences.nfcAutoStartWater,
             status = when {
                 adapter == null -> "这台设备不支持 NFC"
                 adapter?.isEnabled != true -> "NFC 未开启，请在系统设置中打开"
@@ -132,8 +139,15 @@ class NfcTagActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        returnDeviceIdToCaller = returnDeviceIdToCaller ||
+            intent.getBooleanExtra(EXTRA_RETURN_DEVICE_ID, false)
         setIntent(intent)
         consumeIntent(intent)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean(STATE_RETURN_DEVICE_ID, returnDeviceIdToCaller)
+        super.onSaveInstanceState(outState)
     }
 
     override fun onResume() {
@@ -281,7 +295,7 @@ class NfcTagActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
         val id = NfcTagCodec.extractDeviceId(payload)
         if (
             id != null &&
-            intent.getBooleanExtra(EXTRA_RETURN_DEVICE_ID, false)
+            returnDeviceIdToCaller
         ) {
             setResult(
                 RESULT_OK,
@@ -342,4 +356,5 @@ class NfcTagActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
     private fun toast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
+
 }

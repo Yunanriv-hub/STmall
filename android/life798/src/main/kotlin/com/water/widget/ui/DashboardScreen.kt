@@ -10,6 +10,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.overscroll
@@ -43,6 +44,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -65,7 +67,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.WaterDrop
-import androidx.compose.material3.AlertDialog
+import com.water.widget.ui.HuishengGlassAlertDialog as AlertDialog
 import com.water.widget.ui.CatalogLiquidButton as Button
 import com.water.widget.ui.HuishengGlassCard as Card
 import androidx.compose.material3.CardDefaults
@@ -197,8 +199,6 @@ fun DashboardScreen(
 
     CompositionLocalProvider(
         LocalContentColor provides colors.onBackground,
-        LocalHuishengGlassBackdrop provides glassBackdrop,
-        LocalHuishengGlassEnabled provides glassEnabled,
     ) {
     Box(modifier = modifier.fillMaxSize()) {
         Box(
@@ -231,6 +231,11 @@ fun DashboardScreen(
                     center = Offset(size.width * 0.96f, size.height * 0.74f),
                 )
             }
+        }
+        CompositionLocalProvider(
+            LocalHuishengGlassBackdrop provides glassBackdrop,
+            LocalHuishengGlassEnabled provides glassEnabled,
+        ) {
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier
@@ -899,7 +904,15 @@ private fun MineTab(
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
             Button(onClick = onLogin, modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp)) { Text("登录") }
-            OutlinedButton(onClick = onAccounts, modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp)) { Text("管理账号") }
+            OutlinedButton(
+                onClick = onAccounts,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(16.dp),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    MaterialTheme.colorScheme.outline.copy(alpha = 0.55f),
+                ),
+            ) { Text("管理账号") }
         }
     }
     if (state.hasAccount) PersonalUsageSummary(usage = state.usage)
@@ -973,31 +986,120 @@ fun HuishengMineContent(
         LocalHuishengGlassBackdrop provides liquidGlassBackdrop,
         LocalHuishengGlassEnabled provides liquidGlassEnabled,
     ) {
-        Column(
-            modifier = modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+        LazyColumn(
+            modifier = modifier.fillMaxSize(),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                horizontal = 20.dp,
+                vertical = 16.dp,
+            ),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            MineTab(
-                state = state,
-                onLogin = onLogin,
-                onAccounts = onAccounts,
-                onScores = onScores,
-                onWallet = onWallet,
-                onDevices = onDevices,
-                onAddDevice = onAddDevice,
-                themeMode = themeMode,
-                onOpenAppearanceSettings = onOpenAppearance,
-                onOpenSupport = {},
-                updateStatus = "随 Cumpus 一起更新",
-                autoUpdateLabel = "由 Cumpus 管理",
-                onCheckUpdate = {},
-                onUpdateSettings = {},
-                onProject = {},
-                showHostMeta = false
-            )
+            item(key = "account") {
+                InfoCard(title = state.accountTitle, subtitle = state.accountSubtitle) {
+                    StatusRow("账号数量", "${state.accountCount}")
+                    StatusRow("可用额度", state.scoreTitle)
+                    StatusRow("用水登录（必需）", state.appLoginStatusText)
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Button(
+                            onClick = onLogin,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(16.dp),
+                        ) { Text("登录") }
+                        OutlinedButton(
+                            onClick = onAccounts,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(16.dp),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                MaterialTheme.colorScheme.outline.copy(alpha = 0.55f),
+                            ),
+                        ) { Text("管理账号") }
+                    }
+                }
+            }
+            if (state.hasAccount) {
+                item(key = "usage") {
+                    PersonalUsageSummary(usage = state.usage)
+                }
+            }
+            item(key = "devices") {
+                SettingsGroup("设备与饮水") {
+                    SettingsRow(
+                        Icons.Default.WaterDrop,
+                        "设备与饮水",
+                        "查看并控制已收藏饮水机",
+                        onDevices,
+                    )
+                    HorizontalDivider(
+                        Modifier.padding(horizontal = 16.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                    )
+                    SettingsRow(
+                        Icons.Default.Add,
+                        "添加设备",
+                        "扫码、NFC 碰一碰或手动输入",
+                        onAddDevice,
+                    )
+                }
+            }
+            item(key = "funds") {
+                SettingsGroup("账户与资金") {
+                    SettingsRow(
+                        Icons.Default.CheckCircle,
+                        "积分与消费记录",
+                        "查看积分收支和接水花费",
+                        onScores,
+                    )
+                    HorizontalDivider(
+                        Modifier.padding(horizontal = 16.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                    )
+                    SettingsRow(
+                        Icons.Default.AccountBalanceWallet,
+                        "钱包与充值",
+                        if (state.hasAppToken) {
+                            "查看余额、充值与积分兑换"
+                        } else {
+                            "需要用水登录"
+                        },
+                        onWallet,
+                    )
+                }
+            }
+            item(key = "tasks") {
+                SettingsGroup("自动任务") {
+                    AutoTaskSettings()
+                }
+            }
+            item(key = "appearance") {
+                SettingsGroup("应用设置") {
+                    WaterUsageSettingsRow()
+                    HorizontalDivider(
+                        Modifier.padding(horizontal = 16.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                    )
+                    SettingsRow(
+                        Icons.Default.DarkMode,
+                        "外观设置",
+                        themeMode.label,
+                        onOpenAppearance,
+                    )
+                }
+            }
+            item(key = "footer") {
+                Text(
+                    text = "慧生活服务由 WaterWidget 随 Cumpus 一起更新",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                )
+            }
         }
     }
 }
@@ -1050,17 +1152,27 @@ private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> 
 
 @Composable
 internal fun SettingsRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, subtitle: String, onClick: () -> Unit) {
-    Surface(onClick = onClick, shape = WaterShapeTokens.card, color = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(40.dp).clip(RoundedCornerShape(13.dp)).background(MaterialTheme.colorScheme.secondaryContainer), contentAlignment = Alignment.Center) {
-                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
-            }
-            Column(Modifier.weight(1f).padding(start = 13.dp)) {
-                Text(title, fontWeight = FontWeight.SemiBold)
-                Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-            }
-            Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(15.dp))
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(13.dp))
+                .background(MaterialTheme.colorScheme.secondaryContainer),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
         }
+        Column(Modifier.weight(1f).padding(start = 13.dp)) {
+            Text(title, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+        }
+        Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(15.dp))
     }
 }
 

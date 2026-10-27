@@ -44,6 +44,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fktm.app.ui.CatalogLiquidButton as Button
 import com.fktm.app.ui.CatalogLiquidOutlinedButton as OutlinedButton
 import com.fktm.app.ui.CatalogLiquidTextButton as TextButton
+import com.fktm.app.ui.CumpusRoundBackButton
 import com.fktm.app.ui.LiquidGlassPanel
 
 private const val SCHOOL_CODE_DOCS =
@@ -186,7 +187,7 @@ private fun Header(onBack: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            TextButton(onClick = onBack) { Text("‹ 返回") }
+            CumpusRoundBackButton(onBack = onBack)
             Column(Modifier.weight(1f)) {
                 Text("完美校园", fontSize = 21.sp, fontWeight = FontWeight.Bold)
                 Text(

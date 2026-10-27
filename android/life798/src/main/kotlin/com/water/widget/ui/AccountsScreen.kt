@@ -16,7 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material3.AlertDialog
+import com.water.widget.ui.HuishengGlassAlertDialog as AlertDialog
 import androidx.compose.material3.BasicAlertDialog
 import com.water.widget.ui.CatalogLiquidButton as Button
 import com.water.widget.ui.HuishengGlassCard as Card
@@ -130,22 +130,41 @@ fun AccountsScreen(
 
 @Composable
 private fun AccountsHero(accountCount: Int, onBack: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = WaterShapeTokens.card,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "返回", tint = MaterialTheme.colorScheme.onBackground)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        Icons.AutoMirrored.Rounded.ArrowBack,
+                        contentDescription = "返回",
+                        tint = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                Text(
+                    "账户管理",
+                    modifier = Modifier.weight(1f),
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
             }
-            Text("账户管理", modifier = Modifier.weight(1f), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+            Text(
+                if (accountCount == 0) "还没有保存账号，从下方开始添加。" else "已保存 $accountCount 个账号，可分别管理登录信息。",
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
-        Text(
-            if (accountCount == 0) "还没有保存账号，从下方开始添加。" else "已保存 $accountCount 个账号，可分别管理登录信息。",
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
 }
 

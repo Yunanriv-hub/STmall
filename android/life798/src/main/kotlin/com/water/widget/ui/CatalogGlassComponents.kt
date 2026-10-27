@@ -28,10 +28,13 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button as MaterialButton
@@ -82,6 +85,8 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberBackdrop
@@ -106,6 +111,70 @@ import kotlin.math.tanh
 
 internal val LocalHuishengGlassBackdrop = staticCompositionLocalOf<LayerBackdrop?> { null }
 internal val LocalHuishengGlassEnabled = staticCompositionLocalOf { true }
+
+@Composable
+internal fun HuishengGlassAlertDialog(
+    onDismissRequest: () -> Unit,
+    confirmButton: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    dismissButton: (@Composable () -> Unit)? = null,
+    icon: (@Composable () -> Unit)? = null,
+    title: (@Composable () -> Unit)? = null,
+    text: (@Composable () -> Unit)? = null,
+    shape: Shape = RoundedCornerShape(28.dp),
+    containerColor: Color = MaterialTheme.colorScheme.surface,
+    properties: DialogProperties = DialogProperties(
+        usePlatformDefaultWidth = false,
+        decorFitsSystemWindows = false,
+    ),
+) {
+    Dialog(onDismissRequest = onDismissRequest, properties = properties) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.3f))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismissRequest,
+                )
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .imePadding()
+                .padding(horizontal = 22.dp, vertical = 24.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            HuishengGlassSurface(
+                modifier = modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) {},
+                shape = shape,
+                color = containerColor,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+            ) {
+                Column(
+                    Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    icon?.invoke()
+                    title?.invoke()
+                    text?.invoke()
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        dismissButton?.invoke()
+                        confirmButton()
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Composable
 internal fun HuishengGlassCard(
@@ -226,9 +295,13 @@ private fun HuishengGlassSurfaceContainer(
 ) {
     val backdrop = LocalHuishengGlassBackdrop.current
     val glassEnabled = LocalHuishengGlassEnabled.current
-    val useNativeGlass = glassEnabled &&
-        backdrop != null &&
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    /*
+     * Full-size layer-backdrop sampling is too expensive when several cards
+     * are composed during a page transition. Small controls below still use
+     * native lens/blur; large cards use the layered translucent glass below.
+     * This keeps the 60 Hz transition path while preserving glass depth.
+     */
+    val useNativeGlass = false
     val backgroundColor = MaterialTheme.colorScheme.background
     val interaction = suppliedInteractionSource ?: remember { MutableInteractionSource() }
     val catalogInteraction = rememberCatalogGlassInteraction()
@@ -248,16 +321,7 @@ private fun HuishengGlassSurfaceContainer(
         useNativeGlass -> Modifier.drawBackdrop(
             backdrop = backdrop!!,
             shape = { shape },
-            effects = {
-                vibrancy()
-                blur(5.dp.toPx())
-                lens(
-                    refractionHeight = 14.dp.toPx(),
-                    refractionAmount = 24.dp.toPx(),
-                    depthEffect = true,
-                    chromaticAberration = true,
-                )
-            },
+            effects = {},
             highlight = { Highlight.Ambient },
             shadow = {
                 Shadow.Default.copy(
@@ -292,13 +356,6 @@ private fun HuishengGlassSurfaceContainer(
         )
 
         glassEnabled -> Modifier
-            .shadow(
-                elevation = if (elevated) 14.dp else 8.dp,
-                shape = shape,
-                clip = false,
-                ambientColor = Color.Black.copy(alpha = 0.14f),
-                spotColor = color.copy(alpha = 0.18f),
-            )
             .clip(shape)
             .background(
                 Brush.verticalGradient(
@@ -949,10 +1006,9 @@ internal fun CatalogLiquidRadioButton(
 
 @Composable
 private fun glassControlsAvailable(): Boolean {
-    val backdrop = LocalHuishengGlassBackdrop.current
-    return LocalHuishengGlassEnabled.current &&
-        backdrop != null &&
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    // Buttons inside the embedded Huisheng page use Material's composited
+    // surfaces so they do not introduce a native backdrop pass per action.
+    return false
 }
 
 @Composable
@@ -1065,10 +1121,7 @@ internal fun CatalogLiquidSwitch(
     modifier: Modifier = Modifier,
 ) {
     val backdrop = LocalHuishengGlassBackdrop.current
-    if (!LocalHuishengGlassEnabled.current ||
-        backdrop == null ||
-        Build.VERSION.SDK_INT < Build.VERSION_CODES.S
-    ) {
+    if (!LocalHuishengGlassEnabled.current) {
         MaterialSwitch(
             checked = checked,
             onCheckedChange = onCheckedChange,
@@ -1077,6 +1130,7 @@ internal fun CatalogLiquidSwitch(
         return
     }
 
+    val useNativeGlass = backdrop != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val shape = RoundedCornerShape(percent = 50)
     val trackBackdrop = rememberLayerBackdrop()
     val interaction = remember { MutableInteractionSource() }
@@ -1111,17 +1165,21 @@ internal fun CatalogLiquidSwitch(
         Color(0xFF34C759),
         fraction,
     )
-    val combinedBackdrop = rememberCombinedBackdrop(
-        backdrop,
-        rememberBackdrop(trackBackdrop) { drawBackdrop ->
-            scale(
-                scaleX = (2f / 3f) + (0.75f - 2f / 3f) * pressProgress,
-                scaleY = 0.75f * pressProgress,
-            ) {
-                drawBackdrop()
-            }
-        },
-    )
+    val combinedBackdrop = if (useNativeGlass) {
+        rememberCombinedBackdrop(
+            backdrop!!,
+            rememberBackdrop(trackBackdrop) { drawBackdrop ->
+                scale(
+                    scaleX = (2f / 3f) + (0.75f - 2f / 3f) * pressProgress,
+                    scaleY = 0.75f * pressProgress,
+                ) {
+                    drawBackdrop()
+                }
+            },
+        )
+    } else {
+        null
+    }
 
     Box(
         modifier
@@ -1182,46 +1240,76 @@ internal fun CatalogLiquidSwitch(
     ) {
         Box(
             Modifier
-                .layerBackdrop(trackBackdrop)
+                .then(if (useNativeGlass) Modifier.layerBackdrop(trackBackdrop) else Modifier)
                 .clip(shape)
                 .background(trackColor)
                 .size(width = 64.dp, height = 28.dp)
         )
+        val thumbSurface = if (combinedBackdrop != null) {
+            Modifier.drawBackdrop(
+                backdrop = combinedBackdrop,
+                shape = { shape },
+                effects = {
+                    blur(8.dp.toPx() * (1f - pressProgress))
+                    lens(
+                        5.dp.toPx() * pressProgress,
+                        10.dp.toPx() * pressProgress,
+                        chromaticAberration = true,
+                    )
+                },
+                highlight = {
+                    Highlight.Ambient.copy(
+                        width = Highlight.Ambient.width / 1.5f,
+                        blurRadius = Highlight.Ambient.blurRadius / 1.5f,
+                        alpha = pressProgress,
+                    )
+                },
+                shadow = {
+                    Shadow(radius = 4.dp, color = Color.Black.copy(alpha = 0.05f))
+                },
+                innerShadow = {
+                    InnerShadow(radius = 4.dp * pressProgress, alpha = pressProgress)
+                },
+                layerBlock = {
+                    scaleX = pressScale
+                    scaleY = pressScale
+                },
+                onDrawSurface = {
+                    drawRect(Color.White.copy(alpha = 1f - pressProgress))
+                },
+            )
+        } else {
+            Modifier
+                .graphicsLayer {
+                    scaleX = pressScale
+                    scaleY = pressScale
+                }
+                .shadow(
+                    elevation = 4.dp,
+                    shape = shape,
+                    clip = false,
+                    ambientColor = Color.Black.copy(alpha = 0.08f),
+                    spotColor = Color.White.copy(alpha = 0.18f),
+                )
+                .clip(shape)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            Color.White.copy(alpha = 1f - pressProgress * 0.18f),
+                            Color.White.copy(alpha = 0.84f),
+                        )
+                    )
+                )
+                .border(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.64f),
+                    shape = shape,
+                )
+        }
         Box(
             Modifier
                 .offset(x = 2.dp + 20.dp * fraction, y = 2.dp)
-                .drawBackdrop(
-                    backdrop = combinedBackdrop,
-                    shape = { shape },
-                    effects = {
-                        blur(8.dp.toPx() * (1f - pressProgress))
-                        lens(
-                            5.dp.toPx() * pressProgress,
-                            10.dp.toPx() * pressProgress,
-                            chromaticAberration = true,
-                        )
-                    },
-                    highlight = {
-                        Highlight.Ambient.copy(
-                            width = Highlight.Ambient.width / 1.5f,
-                            blurRadius = Highlight.Ambient.blurRadius / 1.5f,
-                            alpha = pressProgress,
-                        )
-                    },
-                    shadow = {
-                        Shadow(radius = 4.dp, color = Color.Black.copy(alpha = 0.05f))
-                    },
-                    innerShadow = {
-                        InnerShadow(radius = 4.dp * pressProgress, alpha = pressProgress)
-                    },
-                    layerBlock = {
-                        scaleX = pressScale
-                        scaleY = pressScale
-                    },
-                    onDrawSurface = {
-                        drawRect(Color.White.copy(alpha = 1f - pressProgress))
-                    },
-                )
+                .then(thumbSurface)
                 .size(width = 40.dp, height = 24.dp)
         )
     }

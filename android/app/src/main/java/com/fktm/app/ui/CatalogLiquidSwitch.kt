@@ -7,6 +7,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -27,8 +28,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
@@ -58,11 +62,12 @@ internal fun CatalogLiquidSwitch(
 ) {
     val backdrop = LocalLiquidGlassBackdrop.current
     val glassEnabled = LocalLiquidGlassEnabled.current
-    if (!glassEnabled || backdrop == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+    if (!glassEnabled) {
         Switch(checked = checked, onCheckedChange = onCheckedChange, modifier = modifier)
         return
     }
 
+    val useNativeGlass = backdrop != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val shape = RoundedCornerShape(percent = 50)
     val trackBackdrop = rememberLayerBackdrop()
     val interaction = remember { MutableInteractionSource() }
@@ -101,17 +106,21 @@ internal fun CatalogLiquidSwitch(
         Color(0xFF34C759),
         fraction,
     )
-    val combinedBackdrop = rememberCombinedBackdrop(
-        backdrop,
-        rememberBackdrop(trackBackdrop) { drawBackdrop ->
-            scale(
-                scaleX = (2f / 3f) + (0.75f - 2f / 3f) * pressProgress,
-                scaleY = 0.75f * pressProgress,
-            ) {
-                drawBackdrop()
-            }
-        },
-    )
+    val combinedBackdrop = if (useNativeGlass) {
+        rememberCombinedBackdrop(
+            backdrop!!,
+            rememberBackdrop(trackBackdrop) { drawBackdrop ->
+                scale(
+                    scaleX = (2f / 3f) + (0.75f - 2f / 3f) * pressProgress,
+                    scaleY = 0.75f * pressProgress,
+                ) {
+                    drawBackdrop()
+                }
+            },
+        )
+    } else {
+        null
+    }
 
     Box(
         modifier
@@ -172,46 +181,76 @@ internal fun CatalogLiquidSwitch(
     ) {
         Box(
             Modifier
-                .layerBackdrop(trackBackdrop)
+                .then(if (useNativeGlass) Modifier.layerBackdrop(trackBackdrop) else Modifier)
                 .clip(shape)
                 .background(trackBrush)
                 .size(width = 64.dp, height = 28.dp)
         )
+        val thumbSurface = if (combinedBackdrop != null) {
+            Modifier.drawBackdrop(
+                backdrop = combinedBackdrop,
+                shape = { shape },
+                effects = {
+                    blur(8.dp.toPx() * (1f - pressProgress))
+                    lens(
+                        5.dp.toPx() * pressProgress,
+                        10.dp.toPx() * pressProgress,
+                        chromaticAberration = true,
+                    )
+                },
+                highlight = {
+                    Highlight.Ambient.copy(
+                        width = Highlight.Ambient.width / 1.5f,
+                        blurRadius = Highlight.Ambient.blurRadius / 1.5f,
+                        alpha = pressProgress,
+                    )
+                },
+                shadow = {
+                    Shadow(radius = 4.dp, color = Color.Black.copy(alpha = 0.05f))
+                },
+                innerShadow = {
+                    InnerShadow(radius = 4.dp * pressProgress, alpha = pressProgress)
+                },
+                layerBlock = {
+                    scaleX = pressScale
+                    scaleY = pressScale
+                },
+                onDrawSurface = {
+                    drawRect(Color.White.copy(alpha = 1f - pressProgress))
+                },
+            )
+        } else {
+            Modifier
+                .graphicsLayer {
+                    scaleX = pressScale
+                    scaleY = pressScale
+                }
+                .shadow(
+                    elevation = 4.dp,
+                    shape = shape,
+                    clip = false,
+                    ambientColor = Color.Black.copy(alpha = 0.08f),
+                    spotColor = Color.White.copy(alpha = 0.18f),
+                )
+                .clip(shape)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            Color.White.copy(alpha = 1f - pressProgress * 0.18f),
+                            Color.White.copy(alpha = 0.84f),
+                        )
+                    )
+                )
+                .border(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.64f),
+                    shape = shape,
+                )
+        }
         Box(
             Modifier
                 .offset(x = 2.dp + 20.dp * fraction, y = 2.dp)
-                .drawBackdrop(
-                    backdrop = combinedBackdrop,
-                    shape = { shape },
-                    effects = {
-                        blur(8.dp.toPx() * (1f - pressProgress))
-                        lens(
-                            5.dp.toPx() * pressProgress,
-                            10.dp.toPx() * pressProgress,
-                            chromaticAberration = true,
-                        )
-                    },
-                    highlight = {
-                        Highlight.Ambient.copy(
-                            width = Highlight.Ambient.width / 1.5f,
-                            blurRadius = Highlight.Ambient.blurRadius / 1.5f,
-                            alpha = pressProgress,
-                        )
-                    },
-                    shadow = {
-                        Shadow(radius = 4.dp, color = Color.Black.copy(alpha = 0.05f))
-                    },
-                    innerShadow = {
-                        InnerShadow(radius = 4.dp * pressProgress, alpha = pressProgress)
-                    },
-                    layerBlock = {
-                        scaleX = pressScale
-                        scaleY = pressScale
-                    },
-                    onDrawSurface = {
-                        drawRect(Color.White.copy(alpha = 1f - pressProgress))
-                    },
-                )
+                .then(thumbSurface)
                 .size(width = 40.dp, height = 24.dp)
         )
     }

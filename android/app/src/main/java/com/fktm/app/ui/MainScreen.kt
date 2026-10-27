@@ -20,8 +20,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import com.fktm.app.ui.CatalogLiquidButton as Button
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
+import com.fktm.app.ui.CumpusGlassAlertDialog as AlertDialog
+import com.fktm.app.ui.CumpusGlassCard as Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider

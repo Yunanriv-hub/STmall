@@ -28,7 +28,17 @@ data class SavedDevice(
     val moduleType: Int = -1,
     val customName: String = "",
 ) {
-    val valid: Boolean get() = deviceId.isNotBlank() && macAddress.isNotBlank()
+    /**
+     * 扫码只要拿到 deviceId 就已经完成“添加设备”。
+     *
+     * 部分门店的 scanWasherCode 响应不携带 MAC，MAC 需要随后从
+     * programInfo 补齐。旧逻辑把 MAC 也当作绑定成功的必要条件，导致设备
+     * 已经识别成功却提示“尚未绑定设备”，并阻断后续详情请求。
+     */
+    val valid: Boolean get() = deviceId.isNotBlank()
+
+    /** 蓝牙直连额外需要 MAC；它不应阻止设备展示和云端详情加载。 */
+    val bleReady: Boolean get() = valid && macAddress.isNotBlank()
 
     val displayName: String
         get() = customName.ifBlank {

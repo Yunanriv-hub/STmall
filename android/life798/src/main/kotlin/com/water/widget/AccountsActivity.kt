@@ -11,7 +11,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material3.AlertDialog
+import com.water.widget.ui.HuishengGlassAlertDialog as AlertDialog
 import androidx.compose.material3.Text
 import com.water.widget.ui.CatalogLiquidTextButton as TextButton
 import androidx.compose.runtime.getValue

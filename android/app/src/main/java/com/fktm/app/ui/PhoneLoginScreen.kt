@@ -21,7 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import com.fktm.app.ui.CatalogLiquidButton as Button
-import androidx.compose.material3.Card
+import com.fktm.app.ui.CumpusGlassCard as Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -180,9 +180,7 @@ fun PhoneLoginScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = onCancel, shape = RoundedCornerShape(10.dp)) {
-                Text("返回")
-            }
+            CumpusRoundBackButton(onBack = onCancel)
             Spacer(Modifier.width(12.dp))
             Column {
                 Text("校园账号登录", fontSize = 20.sp, fontWeight = FontWeight.Bold)

@@ -6,7 +6,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material3.AlertDialog
+import com.water.widget.ui.HuishengGlassAlertDialog as AlertDialog
 import com.water.widget.ui.CatalogLiquidButton as Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
