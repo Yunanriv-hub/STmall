@@ -24,11 +24,14 @@ import com.fktm.app.ujing.net.CreateOrderRequest
 import com.fktm.app.ujing.net.DeviceWashModel
 import com.fktm.app.ujing.net.ModuleType
 import com.fktm.app.ujing.net.OrderData
+import com.fktm.app.ujing.net.PayArgumentsData
 import com.fktm.app.ujing.net.PayChannel
 import com.fktm.app.ujing.net.ProgramInfo
 import com.fktm.app.ujing.net.ScanResult
 import com.fktm.app.ujing.net.UjingApi
 import com.fktm.app.ujing.net.WasherStatus
+import com.fktm.app.ujing.net.parsePayArguments
+import com.fktm.app.ujing.net.preferredAlipayChannel
 
 /**
  * 全流程编排：登录 → 扫码 → 选模式 → 蓝牙启动。
@@ -169,9 +172,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val saved = store.currentDevice()
             if (saved.valid) _device.value = saved
             val token = store.currentToken()
+            var authenticated = false
             if (!token.isNullOrBlank()) {
                 api.token = token
                 _loggedIn.value = true
+                authenticated = true
                 _mobile.value = store.mobileFlow.first().orEmpty()
                 if (saved.valid) {
                     refreshProgram(silent = true)
@@ -187,6 +192,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 log("恢复待启动订单 orderId=$savedOrderId")
                 // 顺带把订单状态拉回来：折叠卡的角标与主按钮都靠它判断
                 refreshOrder(savedOrderId)
+                // 渠道列表不跨进程保存；续付前必须重新拉，否则 branchType/签约参数会丢失
+                if (authenticated) loadPayMethods()
             }
         }
     }
@@ -243,6 +250,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         refreshProgram(silent = true)
                         scheduleIdlePoll()
                     }
+                    if (_orderId.value.isNotBlank()) loadPayMethods()
                 }
                 .onFailure { error(it) }
             _busy.value = null
@@ -886,27 +894,49 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val oid = _orderId.value
         if (oid.isBlank()) return
         viewModelScope.launch {
-            runCatching {
-                api.payMethods(
-                    orderId = oid,
-                    serviceSubjectId = _program.value?.serviceSubjectId?.toString(),
-                    deviceId = _device.value.deviceId
-                )
-            }
-                .onSuccess { env ->
-                    val list = env.data?.channels.orEmpty()
-                        .filter { !it.needUpgrade }
-                        .sortedByDescending { it.weight4Display }
-                    _payChannels.value = list
-                    if (list.isNotEmpty() && list.none { it.channel == _selectedChannel.value }) {
-                        _selectedChannel.value =
-                            list.firstOrNull { it.isDefault }?.channel ?: list.first().channel
+            runCatching { fetchPayChannels(oid) }
+                .onSuccess { channels ->
+                    val selected = applyPayChannels(channels)
+                    if (thenPay && selected != null) {
+                        startPay()
+                    } else if (thenPay) {
+                        _toast.value = "当前订单不支持支付宝支付"
                     }
-                    log("支付渠道 ${list.size} 个：" + list.joinToString { "${it.channel}(${it.displayName})" })
-                    if (thenPay && list.isNotEmpty()) startPay()
                 }
-                .onFailure { log("拉支付渠道失败：${it.message}") }
+                .onFailure {
+                    log("拉支付渠道失败：${it.message}")
+                    if (thenPay) error(it)
+                }
         }
+    }
+
+    private suspend fun fetchPayChannels(orderId: String): List<PayChannel> =
+        api.payMethods(
+            orderId = orderId,
+            serviceSubjectId = _program.value?.serviceSubjectId?.toString(),
+            deviceId = _device.value.deviceId,
+        ).data?.channels.orEmpty()
+
+    private fun applyPayChannels(channels: List<PayChannel>): PayChannel? {
+        val list = channels
+            .filter { !it.needUpgrade }
+            .sortedByDescending { it.weight4Display }
+        _payChannels.value = list
+        val selected = preferredAlipayChannel(list)
+        _selectedChannel.value = selected?.channel.orEmpty()
+        log("支付渠道 ${list.size} 个：" + list.joinToString { "${it.channel}(${it.displayName})" })
+        if (selected == null) {
+            log("支付渠道中没有 PayTask 可用的支付宝渠道")
+        } else {
+            log("支付将使用 channel=${selected.channel} branchType=${selected.branchType}")
+        }
+        return selected
+    }
+
+    private suspend fun ensureAlipayChannel(orderId: String): PayChannel? {
+        preferredAlipayChannel(_payChannels.value)?.let { return it }
+        val channels = fetchPayChannels(orderId)
+        return applyPayChannels(channels)
     }
 
     /**
@@ -930,49 +960,101 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun startPay() {
         val oid = _orderId.value
         if (oid.isBlank()) { _toast.value = "请先下单"; return }
-        val channel = _selectedChannel.value
-        if (channel.isBlank()) { _toast.value = "请选择支付方式"; return }
         viewModelScope.launch {
             _busy.value = "正在准备支付"
-            val ch = _payChannels.value.firstOrNull { it.channel == channel }
-            runCatching {
-                api.payArguments(
-                    channel = channel,
-                    orderId = oid,
-                    payVersion = 1,
-                    // 只有已签约的渠道才带 chooseSign：带上才可能触发服务端免密直付
-                    chooseSign = if (ch?.signCapable == true) 1 else null,
-                    branchType = ch?.branchType
-                )
-            }
-                .onSuccess { env ->
-                    val data = env.data
-                    when {
-                        data == null ->
-                            _toast.value = "服务端未返回支付参数"
+            try {
+                val channel = ensureAlipayChannel(oid)
+                    ?: throw IllegalStateException("当前订单未提供支付宝支付渠道")
 
-                        data.skipPay -> {
-                            log("服务端免密直付成功（skipPay=true），无需唤起收银台")
-                            _toast.value = "已免密扣款，正在刷新订单"
-                            refreshOrder(oid)
-                        }
+                // 先按官方收银台的完整参数请求，再回退到最小参数，兼容服务端灰度差异。
+                val complete = requestPayArguments(oid, channel, completeParams = true)
+                if (consumePaymentArguments(oid, complete)) return@launch
+                logPayArgumentsMissing("complete", channel, complete)
 
-                        data.jumpToQuery -> {
-                            _toast.value = "正在确认支付结果"
-                            pollPayStatus(oid)
-                        }
+                val minimal = requestPayArguments(oid, channel, completeParams = false)
+                if (consumePaymentArguments(oid, minimal)) return@launch
+                logPayArgumentsMissing("minimal", channel, minimal)
 
-                        data.orderStr.isNotBlank() -> {
-                            log("取到支付串（${data.orderStr.length} 字符），准备唤起支付宝")
-                            _pendingOrderInfo.value = data.orderStr
-                        }
-
-                        else -> _toast.value = "服务端未签发支付串"
-                    }
+                val latest = runCatching { api.orderDetail(oid).data }.getOrNull()
+                if (latest?.payFlag == 1) {
+                    _order.value = latest
+                    _paid.value = true
+                    _toast.value = "订单已支付，可以启动洗衣机"
+                    return@launch
                 }
-                .onFailure { error(it) }
-            _busy.value = null
+                _toast.value = "已刷新支付渠道，但服务端仍未返回支付宝参数，请稍后重试"
+            } catch (it: Throwable) {
+                error(it)
+            } finally {
+                _busy.value = null
+            }
         }
+    }
+
+    private suspend fun requestPayArguments(
+        orderId: String,
+        channel: PayChannel,
+        completeParams: Boolean,
+    ): PayArgumentsData {
+        val env = api.payArguments(
+            channel = channel.channel,
+            orderId = orderId,
+            payVersion = 1,
+            chooseSign = if (completeParams) {
+                if (channel.signCapable) 1 else 0
+            } else {
+                null
+            },
+            branchType = if (completeParams) channel.branchType else null,
+            jumpToAliMini = false,
+        )
+        return parsePayArguments(env.data)
+    }
+
+    private suspend fun consumePaymentArguments(
+        orderId: String,
+        data: PayArgumentsData,
+    ): Boolean {
+        when {
+            data.skipPay -> {
+                log("服务端免密直付成功（skipPay=true），无需唤起收银台")
+                _toast.value = "已免密扣款，正在刷新订单"
+                refreshOrder(orderId)
+                return true
+            }
+
+            data.jumpToQuery -> {
+                _toast.value = "正在确认支付结果"
+                pollPayStatus(orderId)
+                return true
+            }
+
+            data.orderStr.isNotBlank() -> {
+                log("取到支付串（${data.orderStr.length} 字符），准备唤起支付宝")
+                _pendingOrderInfo.value = data.orderStr
+                return true
+            }
+
+            data.alreadyPaid -> {
+                _paid.value = true
+                _toast.value = "订单已支付，可以启动洗衣机"
+                refreshOrder(orderId)
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun logPayArgumentsMissing(
+        attempt: String,
+        channel: PayChannel,
+        data: PayArgumentsData,
+    ) {
+        // 只记录渠道、尝试类型和字段名，绝不输出支付串、签名或订单号。
+        log(
+            "支付参数为空：attempt=$attempt channel=${channel.channel} " +
+                "branchType=${channel.branchType} keys=${data.responseKeys.joinToString(",")}"
+        )
     }
 
     /** UI 层唤起支付宝后的结果回传。 */

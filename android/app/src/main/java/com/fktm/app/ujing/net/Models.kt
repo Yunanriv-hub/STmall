@@ -9,6 +9,8 @@ import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
 /**
@@ -504,6 +506,11 @@ data class PayChannel(
                 else -> channel
             }
         }
+
+    /** PayTask 能直接消费的支付宝渠道。其他渠道不能塞给支付宝 SDK。 */
+    val alipaySdkCompatible: Boolean
+        get() = channel.equals("alipay", ignoreCase = true) ||
+            channel.equals("alipayF2F", ignoreCase = true)
 }
 
 @Serializable
@@ -512,34 +519,164 @@ data class PayMethodsData(
     val unionPayDirectLogo: String? = null
 )
 
-/** `payment/arguments` 响应里的支付参数。 */
-@Serializable
-data class PayInfo(
-    /** 支付宝订单串：`app_id=...&biz_content=...&sign=...`，直接喂给 PayTask。 */
-    val orderInfo: String = ""
-)
-
 /**
- * `GET /payment/arguments` 响应。
+ * 归一化后的 `GET /payment/arguments` 响应。
  *
- * 兼容两种形态：带 `payInfo` 包裹（官方主路径），或 orderInfo 直接挂顶层
- * （官方代码里写作 `res.payInfo || res`）。
+ * 原始响应先以 [JsonElement] 接收，再在 [parsePayArguments] 中归一化。服务端在
+ * 不同微信/支付宝入口下会把支付串放在 `payInfo.orderInfo`、`payInfo` 字符串、
+ * `orderStr` 或 `payParams` 等位置；固定解析单一字段会在灰度期误报“未签发”。
  *
  * - [skipPay] = true → 服务端已免密扣款完成，客户端**不要**再唤起收银台；
  * - [jumpToQuery] = true → 跳支付状态页轮询。
  */
-@Serializable
 data class PayArgumentsData(
-    val payInfo: PayInfo? = null,
-    val orderInfo: String? = null,
-    @Serializable(with = FlexibleBoolSerializer::class) val skipPay: Boolean = false,
-    @Serializable(with = FlexibleBoolSerializer::class) val jumpToQuery: Boolean = false,
-    val orderNo: String? = null,
-    val channel: String? = null
+    /** 支付宝订单串：`app_id=...&biz_content=...&sign=...`。 */
+    val orderStr: String = "",
+    val skipPay: Boolean = false,
+    val jumpToQuery: Boolean = false,
+    val payFlag: Int? = null,
+    val isPaid: Boolean = false,
+    /** 只用于诊断的响应字段名，不包含任何字段值。 */
+    val responseKeys: List<String> = emptyList()
 ) {
-    /** 取支付宝订单串（包裹 / 裸两种形态）。 */
-    val orderStr: String
-        get() = payInfo?.orderInfo?.takeIf { it.isNotBlank() } ?: orderInfo.orEmpty()
+    val alreadyPaid: Boolean get() = payFlag == 1 || isPaid
+}
+
+/**
+ * 安全选择本 App 能消费的支付宝渠道。
+ *
+ * 收银台通常把 `unionPay` 标成默认渠道，但当前 App 只集成支付宝 SDK，不能把
+ * 银联参数交给 PayTask。支付宝必须优先于服务端默认渠道。
+ */
+fun preferredAlipayChannel(channels: List<PayChannel>): PayChannel? {
+    val usable = channels.filter { !it.needUpgrade && it.alipaySdkCompatible }
+    return usable.firstOrNull { it.channel.equals("alipay", ignoreCase = true) }
+        ?: usable.firstOrNull { it.channel.equals("alipayF2F", ignoreCase = true) }
+}
+
+/**
+ * 把服务端可能返回的支付参数形态归一化。
+ *
+ * 只在明确的支付字段中取值，不扫描整个 JSON，避免把普通订单号、签名或展示文案
+ * 误当成支付宝订单串。未知字段只保留字段名供日志排查。
+ */
+fun parsePayArguments(element: JsonElement?): PayArgumentsData {
+    if (element == null) return PayArgumentsData()
+    if (element is JsonPrimitive) {
+        return PayArgumentsData(orderStr = element.payStringValue().orEmpty())
+    }
+    val obj = element as? JsonObject ?: return PayArgumentsData()
+    return PayArgumentsData(
+        orderStr = extractAlipayOrderString(obj).orEmpty(),
+        skipPay = obj.flexibleBool("skipPay", "skip_pay"),
+        jumpToQuery = obj.flexibleBool("jumpToQuery", "jump_to_query"),
+        payFlag = obj.flexibleInt("payFlag", "pay_flag"),
+        isPaid = obj.flexibleBool("isPaid", "paid"),
+        responseKeys = collectResponseKeys(obj),
+    )
+}
+
+private val PAY_STRING_KEYS = setOf(
+    "orderinfo",
+    "orderstr",
+    "orderstring",
+    "payorderinfo",
+    "payorderstr",
+    "paystring",
+    "signedorderinfo",
+    "signedorderstr",
+    "alipayorderinfo",
+    "alipayorderstr",
+)
+
+private val PAY_CONTAINER_KEYS = setOf(
+    "payinfo",
+    "payparams",
+    "payarguments",
+    "alipay",
+    "alipayargs",
+)
+
+private fun extractAlipayOrderString(
+    obj: JsonObject,
+    depth: Int = 0,
+): String? {
+    if (depth > 2) return null
+
+    obj.entries.firstOrNull { (key, _) -> key.lowercase() in PAY_STRING_KEYS }
+        ?.value
+        ?.let { value ->
+            (value as? JsonPrimitive)?.payStringValue()?.let { return it }
+        }
+
+    obj.entries.firstOrNull { (key, _) -> key.lowercase() in PAY_CONTAINER_KEYS }
+        ?.value
+        ?.let { container ->
+            when (container) {
+                is JsonPrimitive -> container.payStringValue()
+
+                is JsonObject -> extractAlipayOrderString(container, depth + 1)
+                    ?: extractNestedPayString(container, depth + 1)
+
+                else -> null
+            }
+        }
+        ?.let { return it }
+
+    return extractNestedPayString(obj, depth)
+}
+
+private fun JsonPrimitive.payStringValue(): String? {
+    val text = content.trim()
+    if (text.isBlank() || text == "null") return null
+    if (text.startsWith("{")) {
+        val nested = runCatching { UjingJson.parseToJsonElement(text) as? JsonObject }
+            .getOrNull()
+        if (nested != null) return extractAlipayOrderString(nested)
+    }
+    return text
+}
+
+private fun extractNestedPayString(obj: JsonObject, depth: Int): String? {
+    if (depth > 2) return null
+    for ((key, value) in obj) {
+        val normalized = key.lowercase()
+        if (normalized in PAY_STRING_KEYS || normalized in PAY_CONTAINER_KEYS) continue
+        val child = value as? JsonObject ?: continue
+        extractAlipayOrderString(child, depth + 1)?.let { return it }
+    }
+    return null
+}
+
+private fun collectResponseKeys(obj: JsonObject): List<String> {
+    val keys = LinkedHashSet<String>()
+    obj.keys.take(12).forEach(keys::add)
+    for ((actualKey, value) in obj) {
+        if (actualKey.lowercase() !in PAY_CONTAINER_KEYS) continue
+        val child = value as? JsonObject ?: continue
+        child.keys.take(12).forEach { keys.add("$actualKey.$it") }
+    }
+    return keys.toList()
+}
+
+private fun JsonObject.flexibleBool(vararg keys: String): Boolean {
+    val normalized = keys.map { it.lowercase() }.toSet()
+    val raw = entries.firstOrNull { it.key.lowercase() in normalized }?.value
+        ?: return false
+    val text = (raw as? JsonPrimitive)?.content?.trim()?.lowercase() ?: return false
+    return when (text) {
+        "1", "true", "yes" -> true
+        "0", "false", "no", "null", "" -> false
+        else -> text.toDoubleOrNull()?.let { it != 0.0 } ?: false
+    }
+}
+
+private fun JsonObject.flexibleInt(vararg keys: String): Int? {
+    val normalized = keys.map { it.lowercase() }.toSet()
+    val raw = entries.firstOrNull { it.key.lowercase() in normalized }?.value as? JsonPrimitive
+        ?: return null
+    val text = raw.content.trim()
+    return text.toIntOrNull() ?: text.toDoubleOrNull()?.toInt()
 }
 
 /** `GET /app/payment/{id}/lastPayStatus` 响应。status == "3" 为支付成功。 */

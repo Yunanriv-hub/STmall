@@ -342,8 +342,12 @@ class UjingApi {
         payVersion: Int = 1,
         chooseSign: Int? = null,
         branchType: Int? = null,
-        jumpToAliMini: Boolean? = null
-    ): Envelope<PayArgumentsData> = call(
+        jumpToAliMini: Boolean? = null,
+        alipayF2FNoAds: Boolean = false,
+        couponId: String = "",
+        redPacketId: String = "",
+        isUseRedPacket: Boolean = false,
+    ): Envelope<JsonElement> = call(
         "GET", "/api/v1/payment/arguments", biz(),
         query = mapOf(
             "channel" to channel,
@@ -351,9 +355,13 @@ class UjingApi {
             "payVersion" to payVersion.toString(),
             "chooseSign" to chooseSign?.toString(),
             "branchType" to branchType?.toString(),
-            "jumpToAliMini" to jumpToAliMini?.toString()
+            "jumpToAliMini" to jumpToAliMini?.toString(),
+            "alipayF2FNoAds" to alipayF2FNoAds.toString(),
+            "couponId" to couponId,
+            "redPacketId" to redPacketId,
+            "isUseRedPacket" to isUseRedPacket.toString(),
         ),
-        d = PayArgumentsData.serializer()
+        d = JsonElement.serializer()
     )
 
     /** 支付成功后向服务端回执。 */

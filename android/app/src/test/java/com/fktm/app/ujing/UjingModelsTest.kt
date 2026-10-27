@@ -3,8 +3,12 @@ package com.fktm.app.ujing
 import com.fktm.app.ujing.net.DeviceWashModel
 import com.fktm.app.ujing.net.ModuleType
 import com.fktm.app.ujing.net.OrderData
+import com.fktm.app.ujing.net.PayChannel
+import com.fktm.app.ujing.net.UjingJson
 import com.fktm.app.ujing.net.UjingApi
 import com.fktm.app.ujing.net.WasherStatus
+import com.fktm.app.ujing.net.parsePayArguments
+import com.fktm.app.ujing.net.preferredAlipayChannel
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
@@ -57,5 +61,70 @@ class UjingModelsTest {
             )
         )
         assertFalse(api.isUjingQrCode("https://example.com/ucqrc/index.html?cd=123456"))
+    }
+
+    @Test
+    fun parsesCanonicalPaymentArguments() {
+        val data = UjingJson.parseToJsonElement(
+            """{"payInfo":{"orderInfo":"app_id=202100&sign=abc"}}"""
+        )
+        val parsed = parsePayArguments(data)
+
+        assertEquals("app_id=202100&sign=abc", parsed.orderStr)
+        assertTrue(parsed.responseKeys.contains("payInfo.orderInfo"))
+    }
+
+    @Test
+    fun parsesStringAndAliasPaymentArguments() {
+        val asPayInfoString = parsePayArguments(
+            UjingJson.parseToJsonElement("""{"payInfo":"app_id=1&sign=a"}""")
+        )
+        val asPayParams = parsePayArguments(
+            UjingJson.parseToJsonElement("""{"payParams":{"orderStr":"app_id=2&sign=b"}}""")
+        )
+        val asTopLevel = parsePayArguments(
+            UjingJson.parseToJsonElement("""{"orderInfo":"app_id=3&sign=c"}""")
+        )
+        val asEscapedJson = parsePayArguments(
+            UjingJson.parseToJsonElement(
+                """{"payInfo":"{\"orderInfo\":\"app_id=4&sign=d\"}"}"""
+            )
+        )
+
+        assertEquals("app_id=1&sign=a", asPayInfoString.orderStr)
+        assertEquals("app_id=2&sign=b", asPayParams.orderStr)
+        assertEquals("app_id=3&sign=c", asTopLevel.orderStr)
+        assertEquals("app_id=4&sign=d", asEscapedJson.orderStr)
+    }
+
+    @Test
+    fun parsesNumericPaymentFlagsWithoutMistakingUnknownData() {
+        val skipped = parsePayArguments(
+            UjingJson.parseToJsonElement("""{"skipPay":1,"payFlag":"0"}""")
+        )
+        val paid = parsePayArguments(
+            UjingJson.parseToJsonElement("""{"payFlag":"1"}""")
+        )
+        val unknown = parsePayArguments(
+            UjingJson.parseToJsonElement("""{"newServerField":"not-a-payment-string"}""")
+        )
+
+        assertTrue(skipped.skipPay)
+        assertTrue(paid.alreadyPaid)
+        assertEquals("", unknown.orderStr)
+        assertTrue(unknown.responseKeys.contains("newServerField"))
+    }
+
+    @Test
+    fun prefersAlipayEvenWhenUnionPayIsServerDefault() {
+        val selected = preferredAlipayChannel(
+            listOf(
+                PayChannel(channel = "unionPay", isDefault = true, weight4Display = 114),
+                PayChannel(channel = "wechatPay", weight4Display = 20),
+                PayChannel(channel = "alipay", weight4Display = 12),
+            )
+        )
+
+        assertEquals("alipay", selected?.channel)
     }
 }
