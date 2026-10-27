@@ -187,15 +187,15 @@ android/app/build/outputs/apk/release/app-release.apk
 
 | 项目 | 值 |
 |---|---|
-| 版本 | `0.6.4` |
-| versionCode | `29` |
+| 版本 | `0.6.5` |
+| versionCode | `30` |
 | 包名 | `com.rea.campuslite` |
 | minSdk | `26` |
 | targetSdk | `36` |
-| Release APK | `Cumpus_0.6.4.apk` |
-| SHA-256 | `F93B7F51EB7A7DF2D4A0830BDD9F09555203902AD81209DAF64C89446B0B225B` |
+| Release APK | `Cumpus_0.6.5.apk` |
+| SHA-256 | `C2DC5354A24E126BAA76F5854D5E97D1E8438E622ACF831786D7844C074B84E5` |
 
-该版本已通过 281 项 JVM 单元测试、release 编译、Android Lint 关键检查和
+该版本已通过 282 项 JVM 单元测试、release 编译、Android Lint 关键检查和
 v2 签名校验。
 
 ## 兼容性说明

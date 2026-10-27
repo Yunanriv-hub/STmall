@@ -1,10 +1,10 @@
 {
   "channel": "stable",
-  "versionName": "0.6.4",
-  "versionCode": 29,
+  "versionName": "0.6.5",
+  "versionCode": 30,
   "isReady": false,
   "minVersionCode": 1,
-  "releaseNotes": "Cumpus 0.6.4：修复 U净继续支付订单时偶发提示“服务端未签发支付串”；续付前恢复支付宝渠道并补齐支付参数，兼容多种服务端响应形态，已支付订单会直接恢复启动入口。项目继续只通过本地 APK 分发。",
+  "releaseNotes": "Cumpus 0.6.5：修复 U净支付接口因空 redPacketId 返回 HTTP 500 的问题；未使用红包或优惠券时不再发送空优惠 ID，并保留续付渠道恢复与支付参数兼容修复。项目继续只通过本地 APK 分发。",
   "releaseUrl": "",
   "assets": []
 }

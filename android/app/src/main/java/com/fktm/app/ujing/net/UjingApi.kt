@@ -344,8 +344,8 @@ class UjingApi {
         branchType: Int? = null,
         jumpToAliMini: Boolean? = null,
         alipayF2FNoAds: Boolean = false,
-        couponId: String = "",
-        redPacketId: String = "",
+        couponId: String? = null,
+        redPacketId: String? = null,
         isUseRedPacket: Boolean = false,
     ): Envelope<JsonElement> = call(
         "GET", "/api/v1/payment/arguments", biz(),
@@ -357,8 +357,10 @@ class UjingApi {
             "branchType" to branchType?.toString(),
             "jumpToAliMini" to jumpToAliMini?.toString(),
             "alipayF2FNoAds" to alipayF2FNoAds.toString(),
-            "couponId" to couponId,
-            "redPacketId" to redPacketId,
+            // 这两个字段在服务端是可选整数。未使用优惠时发送空字符串会被
+            // strconv.ParseInt 解析为 500；必须让 urlOf 完全省略该参数。
+            "couponId" to optionalNumericId(couponId),
+            "redPacketId" to optionalNumericId(redPacketId),
             "isUseRedPacket" to isUseRedPacket.toString(),
         ),
         d = JsonElement.serializer()
@@ -397,4 +399,11 @@ class UjingApi {
         )
     }
 }
+
+/**
+ * U净优惠字段是可选整数。空串或非数字都不能进入 query：
+ * 服务端会直接对字段做 strconv.ParseInt，空串会返回 HTTP 500。
+ */
+internal fun optionalNumericId(value: String?): String? =
+    value?.trim()?.takeIf { it.isNotEmpty() && it.toLongOrNull() != null }
 

@@ -1,5 +1,12 @@
 # 更新记录
 
+## 0.6.5
+
+- 修复 U净支付接口返回 HTTP 500：
+  `parsing field "redPacketId": strconv.ParseInt: parsing "": invalid syntax`。
+- 未使用红包或优惠券时不再发送空 `redPacketId`、`couponId` 查询参数。
+- 优惠字段只接受有效整数；空值、空格和非数字值会安全省略，避免服务端解析失败。
+
 ## 0.6.4
 
 - 修复 U净“继续支付订单”偶发提示“服务端未签发支付串”。

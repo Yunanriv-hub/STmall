@@ -7,6 +7,7 @@ import com.fktm.app.ujing.net.PayChannel
 import com.fktm.app.ujing.net.UjingJson
 import com.fktm.app.ujing.net.UjingApi
 import com.fktm.app.ujing.net.WasherStatus
+import com.fktm.app.ujing.net.optionalNumericId
 import com.fktm.app.ujing.net.parsePayArguments
 import com.fktm.app.ujing.net.preferredAlipayChannel
 import org.junit.Assert.assertFalse
@@ -126,5 +127,14 @@ class UjingModelsTest {
         )
 
         assertEquals("alipay", selected?.channel)
+    }
+
+    @Test
+    fun omitsEmptyOrInvalidOptionalPaymentIds() {
+        assertEquals(null, optionalNumericId(null))
+        assertEquals(null, optionalNumericId(""))
+        assertEquals(null, optionalNumericId("  "))
+        assertEquals(null, optionalNumericId("red-packet"))
+        assertEquals("123456", optionalNumericId(" 123456 "))
     }
 }
