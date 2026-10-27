@@ -1,17 +1,25 @@
 package com.fktm.app.ujing
 
+import com.fktm.app.ujing.net.ApiResponseDiagnostics
 import com.fktm.app.ujing.net.DeviceWashModel
 import com.fktm.app.ujing.net.Headers
 import com.fktm.app.ujing.net.ModuleType
 import com.fktm.app.ujing.net.OrderData
 import com.fktm.app.ujing.net.PayChannel
+import com.fktm.app.ujing.net.PaymentOrderDisposition
+import com.fktm.app.ujing.net.PaymentPayloadKind
+import com.fktm.app.ujing.net.PaymentRequestGate
+import com.fktm.app.ujing.net.PaymentStartDecision
 import com.fktm.app.ujing.net.UjingJson
 import com.fktm.app.ujing.net.UjingApi
 import com.fktm.app.ujing.net.WasherStatus
+import com.fktm.app.ujing.net.canRebuildAfterMissingPayment
 import com.fktm.app.ujing.net.optionalNumericId
 import com.fktm.app.ujing.net.paymentChooseSign
+import com.fktm.app.ujing.net.paymentOrderDisposition
 import com.fktm.app.ujing.net.parsePayArguments
 import com.fktm.app.ujing.net.preferredAlipayChannel
+import com.fktm.app.ujing.net.validateAlipaySdkOrderString
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
@@ -69,46 +77,57 @@ class UjingModelsTest {
     @Test
     fun parsesCanonicalPaymentArguments() {
         val data = UjingJson.parseToJsonElement(
-            """{"payInfo":{"orderInfo":"app_id=202100&sign=abc"}}"""
+            """{"payInfo":{"orderInfo":"${validOrderInfo()}"},"payFlag":0}"""
         )
         val parsed = parsePayArguments(data)
 
-        assertEquals("app_id=202100&sign=abc", parsed.orderStr)
+        assertEquals(validOrderInfo(), parsed.orderStr)
+        assertEquals(PaymentPayloadKind.ALIPAY_SDK, parsed.payloadKind)
+        assertEquals(validOrderInfo().length, parsed.payloadLength)
+        assertEquals("payInfo.orderInfo", parsed.sourcePath)
         assertTrue(parsed.responseKeys.contains("payInfo.orderInfo"))
     }
 
     @Test
-    fun parsesStringAndAliasPaymentArguments() {
+    fun acceptsOnlyContractPaymentContainersAndJsonStrings() {
         val asPayInfoString = parsePayArguments(
-            UjingJson.parseToJsonElement("""{"payInfo":"app_id=1&sign=a"}""")
-        )
-        val asPayParams = parsePayArguments(
-            UjingJson.parseToJsonElement("""{"payParams":{"orderStr":"app_id=2&sign=b"}}""")
+            UjingJson.parseToJsonElement("""{"payInfo":"${validOrderInfo()}"}""")
         )
         val asTopLevel = parsePayArguments(
-            UjingJson.parseToJsonElement("""{"orderInfo":"app_id=3&sign=c"}""")
+            UjingJson.parseToJsonElement("""{"orderInfo":"${validOrderInfo()}"}""")
         )
         val asEscapedJson = parsePayArguments(
             UjingJson.parseToJsonElement(
-                """{"payInfo":"{\"orderInfo\":\"app_id=4&sign=d\"}"}"""
+                """{"payInfo":"{\"orderInfo\":\"${validOrderInfo()}\"}"}"""
+            )
+        )
+        val unrelatedContainer = parsePayArguments(
+            UjingJson.parseToJsonElement("""{"payParams":{"orderStr":"${validOrderInfo()}"}}""")
+        )
+        val emptyPayInfoFallback = parsePayArguments(
+            UjingJson.parseToJsonElement(
+                """{"payInfo":"","orderInfo":"${validOrderInfo()}"}"""
             )
         )
 
-        assertEquals("app_id=1&sign=a", asPayInfoString.orderStr)
-        assertEquals("app_id=2&sign=b", asPayParams.orderStr)
-        assertEquals("app_id=3&sign=c", asTopLevel.orderStr)
-        assertEquals("app_id=4&sign=d", asEscapedJson.orderStr)
+        assertEquals(validOrderInfo(), asPayInfoString.orderStr)
+        assertEquals(validOrderInfo(), asTopLevel.orderStr)
+        assertEquals(validOrderInfo(), asEscapedJson.orderStr)
+        assertEquals(validOrderInfo(), emptyPayInfoFallback.orderStr)
+        assertEquals("", unrelatedContainer.orderStr)
+        assertEquals(PaymentPayloadKind.NONE, unrelatedContainer.payloadKind)
     }
 
     @Test
-    fun findsAlipayOrderStringInsideUnknownWrappersAndArrays() {
+    fun doesNotScanUnknownWrappersOrArraysForPaymentData() {
         val parsed = parsePayArguments(
             UjingJson.parseToJsonElement(
-                """{"newWrapper":[{"serverPayload":"app_id=1&biz_content=x&sign=y"}]}"""
+                """{"newWrapper":[{"serverPayload":"${validOrderInfo()}"}]}"""
             )
         )
 
-        assertEquals("app_id=1&biz_content=x&sign=y", parsed.orderStr)
+        assertEquals("", parsed.orderStr)
+        assertEquals(PaymentPayloadKind.NONE, parsed.payloadKind)
     }
 
     @Test
@@ -133,6 +152,19 @@ class UjingModelsTest {
     }
 
     @Test
+    fun readsControlFlagsOnlyFromResponseDataTopLevel() {
+        val parsed = parsePayArguments(
+            UjingJson.parseToJsonElement(
+                """{"payInfo":{"skipPay":1,"jumpToQuery":1,"orderInfo":"${validOrderInfo()}"}}"""
+            )
+        )
+
+        assertFalse(parsed.skipPay)
+        assertFalse(parsed.jumpToQuery)
+        assertEquals(validOrderInfo(), parsed.orderStr)
+    }
+
+    @Test
     fun prefersAlipayEvenWhenUnionPayIsServerDefault() {
         val selected = preferredAlipayChannel(
             listOf(
@@ -143,6 +175,18 @@ class UjingModelsTest {
         )
 
         assertEquals("alipay", selected?.channel)
+    }
+
+    @Test
+    fun rejectsAlipayF2FBecauseItIsNotTheSdkChannel() {
+        val selected = preferredAlipayChannel(
+            listOf(
+                PayChannel(channel = "alipayF2F", isDefault = true),
+                PayChannel(channel = "wechatPay"),
+            )
+        )
+
+        assertEquals(null, selected)
     }
 
     @Test
@@ -157,9 +201,25 @@ class UjingModelsTest {
 
     @Test
     fun recognizesDuplicatePaymentRequestError() {
-        assertTrue(
-            UjingApi.ApiException(6020208, "请勿重复请求").isDuplicatePaymentRequest
+        val diagnostics = ApiResponseDiagnostics(
+            httpStatus = 500,
+            businessCode = 6020208,
+            message = "请勿重复请求",
+            reason = null,
+            fieldTypes = mapOf("$.data.payInfo" to "object"),
+            bodyBytes = 80,
         )
+        val error = UjingApi.ApiException(
+            6020208,
+            "请勿重复请求",
+            httpStatus = 500,
+            diagnostics = diagnostics,
+        )
+
+        assertTrue(error.isDuplicatePaymentRequest)
+        assertEquals(500, error.httpStatus)
+        assertEquals(6020208, error.diagnostics?.businessCode)
+        assertEquals("object", error.diagnostics?.fieldTypes?.get("$.data.payInfo"))
         assertFalse(
             UjingApi.ApiException(500, "server error").isDuplicatePaymentRequest
         )
@@ -185,4 +245,108 @@ class UjingModelsTest {
         assertEquals("1.1.79", headers["weex-version"])
         assertEquals("Bearer token", headers["Authorization"])
     }
+
+    @Test
+    fun rejectsUrlsJsonQrAndFakeSignaturesAsSdkPayloads() {
+        assertEquals(
+            PaymentPayloadKind.URL,
+            validateAlipaySdkOrderString("https://example.com/pay").kind,
+        )
+        assertEquals(
+            PaymentPayloadKind.JSON_OBJECT,
+            validateAlipaySdkOrderString(
+                """{"app_id":"1","biz_content":"x","sign":"abcdefghijklmnop"}"""
+            ).kind,
+        )
+        assertEquals(
+            PaymentPayloadKind.QR_OR_TEXT,
+            validateAlipaySdkOrderString("ALIPAY_QR:123456").kind,
+        )
+        assertEquals(
+            PaymentPayloadKind.INVALID_ALIPAY,
+            validateAlipaySdkOrderString(
+                "app_id=1&biz_content=x&sign_type=RSA2"
+            ).kind,
+        )
+        assertEquals(
+            PaymentPayloadKind.INVALID_ALIPAY,
+            validateAlipaySdkOrderString(
+                "app_id=1&biz_content=x&sign="
+            ).kind,
+        )
+    }
+
+    @Test
+    fun preservesValidSignedOrderStringExactly() {
+        val raw = validOrderInfo()
+        val validation = validateAlipaySdkOrderString(raw)
+
+        assertTrue(validation.valid)
+        assertEquals(PaymentPayloadKind.ALIPAY_SDK, validation.kind)
+        assertEquals(raw.length, validation.length)
+        assertEquals(raw, parsePayArguments(UjingJson.parseToJsonElement("\"$raw\"")).orderStr)
+    }
+
+    @Test
+    fun distinguishesEmptyPaidProcessingAndTerminalOrders() {
+        val empty = parsePayArguments(null)
+        assertEquals(PaymentPayloadKind.NONE, empty.payloadKind)
+        assertTrue(empty.payloadReason.contains("为空"))
+
+        assertEquals(
+            PaymentOrderDisposition.ALREADY_PAID,
+            paymentOrderDisposition(OrderData(status = WasherStatus.PAID)),
+        )
+        assertEquals(
+            PaymentOrderDisposition.PROCESSING,
+            paymentOrderDisposition(OrderData(status = WasherStatus.PAYING)),
+        )
+        assertEquals(
+            PaymentOrderDisposition.PAYABLE,
+            paymentOrderDisposition(OrderData(status = WasherStatus.RESERVED)),
+        )
+        assertEquals(
+            PaymentOrderDisposition.REBUILDABLE,
+            paymentOrderDisposition(OrderData(status = WasherStatus.PAYMENT_TIMEOUT)),
+        )
+        assertEquals(
+            PaymentOrderDisposition.TERMINAL,
+            paymentOrderDisposition(OrderData(status = WasherStatus.CANCELED)),
+        )
+        assertEquals(
+            PaymentOrderDisposition.UNKNOWN,
+            paymentOrderDisposition(null),
+        )
+    }
+
+    @Test
+    fun allowsRebuildOnlyAfterMissingArgumentsForReservedOrExpiredOrder() {
+        assertTrue(canRebuildAfterMissingPayment(WasherStatus.RESERVED))
+        assertTrue(canRebuildAfterMissingPayment(WasherStatus.PAYMENT_TIMEOUT))
+        assertFalse(canRebuildAfterMissingPayment(WasherStatus.PAYING))
+        assertFalse(canRebuildAfterMissingPayment(WasherStatus.PAID))
+        assertFalse(canRebuildAfterMissingPayment(WasherStatus.RUNNING))
+    }
+
+    @Test
+    fun paymentGateBlocksRepeatedClicksAndEnforcesDuplicateCooldown() {
+        var now = 1_000L
+        val gate = PaymentRequestGate { now }
+
+        assertEquals(PaymentStartDecision.Allowed, gate.tryStart())
+        assertEquals(PaymentStartDecision.InFlight, gate.tryStart())
+        gate.finish()
+        gate.blockDuplicate(10)
+        assertEquals(PaymentStartDecision.Cooling(10), gate.tryStart())
+
+        now += 10_000L
+        assertEquals(PaymentStartDecision.Allowed, gate.tryStart())
+        gate.finish()
+    }
+
+    private fun validOrderInfo(): String =
+        "app_id=2021000000000000" +
+            "&biz_content=%7B%22out_trade_no%22%3A%22123%22%7D" +
+            "&charset=utf-8&format=JSON&method=alipay.trade.app.pay" +
+            "&sign_type=RSA2&sign=abcdefghijklmnopqrstuvwxyz0123456789"
 }

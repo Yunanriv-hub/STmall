@@ -1,10 +1,10 @@
 {
   "channel": "stable",
-  "versionName": "0.6.8",
-  "versionCode": 33,
+  "versionName": "0.6.9",
+  "versionCode": 34,
   "isReady": false,
   "minVersionCode": 1,
-  "releaseNotes": "Cumpus 0.6.8：U净支付相关请求切换到官方 Android 2.4.18 请求头与 washer Weex 1.1.79，修复接口成功但不返回 payInfo 的问题，并保留官方支付参数及防重复请求处理。项目继续只通过本地 APK 分发。",
+  "releaseNotes": "Cumpus 0.6.9：重构 U净支付状态机与渠道缓存，支付前确认订单；严格解析并校验 payInfo.orderInfo，只允许官方支付宝 SDK 参数串，区分查询失败、已支付、处理中、不支持方式和 6020208 冷却。项目继续只通过本地 APK 分发。",
   "releaseUrl": "",
   "assets": []
 }

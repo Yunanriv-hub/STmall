@@ -23,6 +23,23 @@ import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
 /**
+ * 脱敏接口诊断。字段值不会进入该结构，字符串只保留长度。
+ */
+data class ApiResponseDiagnostics(
+    val httpStatus: Int,
+    val businessCode: Int?,
+    val message: String?,
+    val reason: String?,
+    val fieldTypes: Map<String, String>,
+    val bodyBytes: Int,
+)
+
+data class PaymentArgumentsResult(
+    val envelope: Envelope<JsonElement>,
+    val diagnostics: ApiResponseDiagnostics,
+)
+
+/**
  * U净云端 API 客户端（OkHttp 手写，不引 Retrofit）。
  *
  * 设计要点：
@@ -55,10 +72,20 @@ class UjingApi {
 
     private val jsonMedia = "application/json; charset=utf-8".toMediaType()
 
-    class ApiException(val code: Int, message: String) : IOException(message) {
+    class ApiException(
+        val code: Int,
+        message: String,
+        val httpStatus: Int? = null,
+        val diagnostics: ApiResponseDiagnostics? = null,
+    ) : IOException(message) {
         /** U净支付参数重复请求。 */
         val isDuplicatePaymentRequest: Boolean get() = code == 6020208
     }
+
+    private data class HttpResponsePayload(
+        val status: Int,
+        val body: String,
+    )
 
     // -----------------------------------------------------------------
     // 基础请求
@@ -73,13 +100,13 @@ class UjingApi {
         return b.build()
     }
 
-    private suspend fun raw(
+    private suspend fun executeRequest(
         method: String,
         path: String,
         headers: Map<String, String>,
         query: Map<String, String?> = emptyMap(),
         bodyJson: String? = null
-    ): String = withContext(Dispatchers.IO) {
+    ): HttpResponsePayload = withContext(Dispatchers.IO) {
         val builder = Request.Builder().url(urlOf(path, query))
         headers.forEach { (k, v) -> builder.header(k, v) }
         when (method) {
@@ -91,32 +118,45 @@ class UjingApi {
         val httpClient = if (path == "/api/v1/payment/arguments") nonRetryClient else client
         httpClient.newCall(builder.build()).execute().use { resp ->
             val text = resp.body?.string().orEmpty()
-            if (text.isBlank()) {
-                if (resp.isSuccessful) return@withContext "{}"
-                throw ApiException(resp.code, "HTTP ${resp.code}")
-            }
-            val code = try {
-                (UjingJson.parseToJsonElement(text) as? JsonObject)
-                    ?.get("code")?.let { (it as? JsonPrimitive)?.content?.toIntOrNull() }
-            } catch (_: Exception) {
-                null
-            }
-            if (code != null && code != 0 && code != 200) {
-                val msg = (UjingJson.parseToJsonElement(text) as? JsonObject)
-                    ?.get("message")?.let { (it as? JsonPrimitive)?.content }
-                    ?: "code=$code"
-                throw ApiException(code, msg)
-            }
-            // `{}` 是服务端的「静默拒绝」形态（HTTP 200、无 code 字段）。
-            // 已知触发场景：`ble/data/report/nordic` 带 orderId + type=2 上报时，
-            // 若订单已在运行（status=40）或订单号无效，服务端什么都不返回。
-            // 这里把它归一化成 code=200 + data=null，由调用方按业务语义判断，
-            // 而不是让整条链路以「接口失败」告终。
-            if (code == null && !resp.isSuccessful) {
-                throw ApiException(resp.code, "HTTP ${resp.code}")
-            }
-            text
+            HttpResponsePayload(resp.code, text)
         }
+    }
+
+    private suspend fun raw(
+        method: String,
+        path: String,
+        headers: Map<String, String>,
+        query: Map<String, String?> = emptyMap(),
+        bodyJson: String? = null,
+    ): String {
+        val payload = executeRequest(method, path, headers, query, bodyJson)
+        val text = payload.body
+        if (text.isBlank()) {
+            if (payload.status in 200..299) return "{}"
+            throw ApiException(payload.status, "HTTP ${payload.status}", payload.status)
+        }
+        val root = runCatching { UjingJson.parseToJsonElement(text) }.getOrNull()
+        val obj = root as? JsonObject
+        val code = obj?.get("code")?.let { (it as? JsonPrimitive)?.content?.toIntOrNull() }
+        val message = obj?.firstTextValue("message", "msg")
+        val reason = obj?.firstTextValue("reason")
+        val diagnostics = responseDiagnostics(payload.status, root, code, message, reason, text)
+        if (code != null && code != 0 && code != 200) {
+            throw ApiException(code, message ?: "code=$code", payload.status, diagnostics)
+        }
+        if (payload.status !in 200..299) {
+            throw ApiException(
+                code ?: payload.status,
+                message ?: "HTTP ${payload.status}",
+                payload.status,
+                diagnostics,
+            )
+        }
+        // `{}` 是服务端的「静默拒绝」形态，由调用方按业务语义判断。
+        if (root == null) {
+            throw ApiException(payload.status, "响应不是 JSON", payload.status, diagnostics)
+        }
+        return text
     }
 
     /**
@@ -137,6 +177,67 @@ class UjingApi {
             UjingJson.decodeFromJsonElement(Envelope.serializer(d), root)
         } else {
             Envelope(code = 200, data = UjingJson.decodeFromJsonElement(d, root))
+        }
+    }
+
+    private fun responseDiagnostics(
+        httpStatus: Int,
+        root: JsonElement?,
+        businessCode: Int?,
+        message: String?,
+        reason: String?,
+        body: String,
+    ): ApiResponseDiagnostics {
+        val fieldTypes = linkedMapOf<String, String>()
+        root?.let { collectFieldTypes(it, "$", fieldTypes, 0) }
+        return ApiResponseDiagnostics(
+            httpStatus = httpStatus,
+            businessCode = businessCode,
+            message = message?.take(160),
+            reason = reason?.take(80),
+            fieldTypes = fieldTypes,
+            bodyBytes = body.toByteArray(Charsets.UTF_8).size,
+        )
+    }
+
+    private fun JsonObject.firstTextValue(vararg names: String): String? {
+        val expected = names.map { it.lowercase() }.toSet()
+        return entries.firstOrNull { it.key.lowercase() in expected }
+            ?.value
+            ?.let { it as? JsonPrimitive }
+            ?.content
+    }
+
+    private fun collectFieldTypes(
+        element: JsonElement,
+        path: String,
+        output: MutableMap<String, String>,
+        depth: Int,
+    ) {
+        if (depth > 6 || output.size >= 80) return
+        when (element) {
+            is JsonObject -> {
+                output[path] = "object"
+                element.entries.take(30).forEach { (key, value) ->
+                    collectFieldTypes(value, "$path.$key", output, depth + 1)
+                }
+            }
+            is JsonArray -> {
+                output[path] = "array(${element.size})"
+                element.take(3).forEachIndexed { index, value ->
+                    collectFieldTypes(value, "$path[$index]", output, depth + 1)
+                }
+            }
+            is JsonPrimitive -> {
+                val type = when {
+                    element.content == "null" -> "null"
+                    element.isString -> "string(len=${element.content.length})"
+                    element.content == "true" || element.content == "false" -> "boolean"
+                    element.content.toDoubleOrNull() != null -> "number"
+                    else -> "primitive"
+                }
+                output[path] = type
+            }
         }
     }
 
@@ -362,9 +463,12 @@ class UjingApi {
         couponId: String = "",
         redPacketId: String? = null,
         isUseRedPacket: Boolean = false,
-    ): Envelope<JsonElement> = call(
-        "GET", "/api/v1/payment/arguments", androidPaymentBiz(),
-        query = mapOf(
+    ): PaymentArgumentsResult {
+        val payload = executeRequest(
+            method = "GET",
+            path = "/api/v1/payment/arguments",
+            headers = androidPaymentBiz(),
+            query = mapOf(
             "channel" to channel,
             "orderId" to orderId,
             "payVersion" to payVersion.toString(),
@@ -378,9 +482,60 @@ class UjingApi {
             "couponId" to couponId,
             "redPacketId" to optionalNumericId(redPacketId),
             "isUseRedPacket" to isUseRedPacket.toString(),
-        ),
-        d = JsonElement.serializer()
-    )
+            ),
+        )
+        val root = runCatching { UjingJson.parseToJsonElement(payload.body) }.getOrNull()
+        val obj = root as? JsonObject
+        val code = obj?.get("code")?.let { (it as? JsonPrimitive)?.content?.toIntOrNull() }
+        val message = obj?.firstTextValue("message", "msg")
+        val reason = obj?.firstTextValue("reason")
+        val diagnostics = responseDiagnostics(
+            payload.status,
+            root,
+            code,
+            message,
+            reason,
+            payload.body,
+        )
+        if (payload.body.isBlank()) {
+            throw ApiException(
+                code ?: payload.status,
+                message ?: "支付参数响应为空",
+                payload.status,
+                diagnostics,
+            )
+        }
+        if (root == null) {
+            throw ApiException(payload.status, "支付参数响应不是 JSON", payload.status, diagnostics)
+        }
+        if (code != null && code != 0 && code != 200) {
+            throw ApiException(code, message ?: "code=$code", payload.status, diagnostics)
+        }
+        if (payload.status !in 200..299) {
+            throw ApiException(
+                code ?: payload.status,
+                message ?: "HTTP ${payload.status}",
+                payload.status,
+                diagnostics,
+            )
+        }
+        val data = when {
+            obj == null -> root
+            obj.containsKey("data") -> obj["data"]?.takeUnless {
+                it is JsonPrimitive && it.content == "null"
+            }
+            else -> root
+        }
+        return PaymentArgumentsResult(
+            envelope = Envelope(
+                code = code ?: 200,
+                reason = reason,
+                message = message,
+                data = data,
+            ),
+            diagnostics = diagnostics,
+        )
+    }
 
     /** 支付成功后向服务端回执。 */
     suspend fun payStatusCommon(orderId: String, channel: String): Envelope<JsonElement> = call(
