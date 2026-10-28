@@ -33,6 +33,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -43,6 +44,7 @@ import com.fktm.app.ui.CatalogLiquidOutlinedButton as OutlinedButton
 import com.fktm.app.ui.CatalogLiquidTextButton as TextButton
 import com.fktm.app.ui.CumpusRoundBackButton
 import com.fktm.app.ui.LiquidGlassPanel
+import com.fktm.app.ujing.pay.AlipayLauncher
 
 @Composable
 fun PangguaiScreen(
@@ -50,6 +52,7 @@ fun PangguaiScreen(
     onBack: () -> Unit,
     onScan: () -> Unit,
 ) {
+    val context = LocalContext.current
     val state by vm.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     var verify by rememberSaveable { mutableStateOf("") }
@@ -58,6 +61,19 @@ fun PangguaiScreen(
         state.message?.let {
             snackbar.showSnackbar(it)
             vm.consumeMessage()
+        }
+    }
+    LaunchedEffect(state.externalLaunchUrl) {
+        val target = state.externalLaunchUrl ?: return@LaunchedEffect
+        vm.consumeExternalLaunchUrl()
+        if (!AlipayLauncher.isInstalled(context)) {
+            vm.onExternalLaunchFailed("识别成功，但本机未安装支付宝")
+            return@LaunchedEffect
+        }
+        runCatching {
+            context.startActivity(AlipayLauncher.deepLinkIntent(target))
+        }.onFailure {
+            vm.onExternalLaunchFailed("无法打开支付宝：${it.message.orEmpty().take(80)}")
         }
     }
 

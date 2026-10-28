@@ -2376,7 +2376,10 @@ private fun IlifeProfileScreen(
             onScores = { context.startActivity(Intent(context, ScoreActivity::class.java)) },
             onWallet = { context.startActivity(Intent(context, WalletActivity::class.java)) },
             onDevices = {
-                context.startActivity(Intent(context, ConfigActivity::class.java))
+                context.startActivity(
+                    Intent(context, ConfigActivity::class.java)
+                        .putExtra(ConfigActivity.EXTRA_HIDE_HOST_META, true)
+                )
             },
             onAddDevice = {
                 context.startActivity(Intent(context, DeviceAddActivity::class.java))

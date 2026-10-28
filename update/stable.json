@@ -1,10 +1,10 @@
 {
   "channel": "stable",
-  "versionName": "0.6.10",
-  "versionCode": 35,
+  "versionName": "0.6.11",
+  "versionCode": 36,
   "isReady": false,
   "minVersionCode": 1,
-  "releaseNotes": "Cumpus 0.6.10：修复仅提供 alipayF2F 的 U净账号无法继续支付的问题；校验并打开官方 alipays://platformapi/startapp 跳转，固定交给支付宝官方包；从支付宝或桌面返回后自动查询订单状态，不再误取消订单或重建。项目继续只通过本地 APK 分发。",
+  "releaseNotes": "Cumpus 0.6.11：隐藏慧生活设备页多余的开发者入口；胖乖生活按原版支持 NQT、IMEI、SN 和吹风机支付宝小程序分流；U净自动补齐蓝牙信息、校验写入结果与收尾上报，改善支付后启动无反馈问题。项目继续只通过本地 APK 分发。",
   "releaseUrl": "",
   "assets": []
 }

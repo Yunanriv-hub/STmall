@@ -163,6 +163,7 @@ fun DashboardScreen(
     onStopDevice: (String) -> Unit = {},
     onOpenSupportLink: (String) -> Unit = LocalUriHandler.current::openUri,
     showMineTab: Boolean = true,
+    showMineHostMeta: Boolean = true,
     glassEnabled: Boolean = true,
     onHostBack: (() -> Unit)? = null
 ) {
@@ -332,7 +333,8 @@ fun DashboardScreen(
                             autoUpdateLabel = autoUpdateLabel,
                             onCheckUpdate = onCheckUpdate,
                             onUpdateSettings = onUpdateSettings,
-                            onProject = onProject
+                            onProject = onProject,
+                            showHostMeta = showMineHostMeta,
                         )
                         Spacer(Modifier.height(8.dp))
                     }

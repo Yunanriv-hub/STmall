@@ -59,7 +59,10 @@ class NfcTagActivity : ComponentActivity(), NfcAdapter.ReaderCallback {
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == RESULT_OK) {
-            startActivity(Intent(this, ConfigActivity::class.java))
+            startActivity(
+                Intent(this, ConfigActivity::class.java)
+                    .putExtra(ConfigActivity.EXTRA_HIDE_HOST_META, true)
+            )
         }
     }
     private var uiState by mutableStateOf(

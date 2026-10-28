@@ -281,20 +281,38 @@ class NordicWasher(
                     ?: return@withTimeout Outcome.Failed(BleError.SERVICE_NOT_FOUND, "无对应特征: $commandType")
 
                 if (BleUuids.NORDIC_ORDER_NO in available && !resp.orderNo.isNullOrBlank()) {
-                    write(BleUuids.NORDIC_ORDER_NO, hexToBytes(resp.orderNo))
+                    if (!write(BleUuids.NORDIC_ORDER_NO, hexToBytes(resp.orderNo))) {
+                        onLog("写 ORDER_NO 失败，启动指令未发送")
+                        return@withTimeout Outcome.Failed(
+                            BleError.CONNECT_ERROR,
+                            "写入订单号失败，请靠近洗衣机后重试",
+                        )
+                    }
                     onLog("写 ORDER_NO = ${resp.orderNo}")
                 }
 
-                write(target, hexToBytes(plain))
+                if (!write(target, hexToBytes(plain))) {
+                    onLog("写启动指令失败 target=$target")
+                    return@withTimeout Outcome.Failed(
+                        BleError.CONNECT_ERROR,
+                        "启动指令写入失败，请靠近洗衣机后重试",
+                    )
+                }
                 onLog("写指令 → $target = $plain")
 
                 delay(2000)
 
                 // 收尾：以 reportType=3 再上报一次，让云端刷新设备状态
-                api.nordicReport(
-                    report.copy(type = 3, command = "", commandType = "", orderId = null)
-                )
-                onLog("收尾上报完成")
+                runCatching {
+                    api.nordicReport(
+                        report.copy(type = 3, command = "", commandType = "", orderId = null)
+                    )
+                }.onSuccess {
+                    onLog("收尾上报完成")
+                }.onFailure {
+                    // 指令已经写入机身，不能因为收尾网络失败再把“已启动”误报为失败。
+                    onLog("收尾上报失败，但启动指令已写入：${it.message.orEmpty()}")
+                }
                 return@withTimeout Outcome.Started(plain, resp, snapshot.remainMinutes, snapshot.statusTimeMs)
             }
 

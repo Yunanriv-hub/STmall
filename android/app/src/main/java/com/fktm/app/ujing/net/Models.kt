@@ -815,7 +815,7 @@ fun isTrustedAlipayDeepLink(raw: String): Boolean = runCatching {
     val scheme = uri.scheme.orEmpty().lowercase()
     val host = uri.host.orEmpty().lowercase()
     val path = uri.path.orEmpty().lowercase()
-    scheme in setOf("alipays", "alipay") &&
+    scheme in setOf("alipays", "alipay", "alipayqr") &&
         host == "platformapi" &&
         path.startsWith("/startapp")
 }.getOrDefault(false)

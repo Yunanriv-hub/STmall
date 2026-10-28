@@ -19,7 +19,8 @@ data class PangguaiUiState(
     val selectedDevice: PangguaiDevice? = null,
     val skus: List<PangguaiSku> = emptyList(),
     val orders: List<PangguaiOrder> = emptyList(),
-    val pendingNqt: String? = null,
+    val pendingScanRaw: String? = null,
+    val externalLaunchUrl: String? = null,
 ) {
     val loggedIn: Boolean get() = !token.isNullOrBlank()
 }
@@ -82,7 +83,7 @@ class PangguaiViewModel(app: Application) : AndroidViewModel(app) {
                         )
                     }
                     refreshAll()
-                    _state.value.pendingNqt?.let(::scanNow)
+                    _state.value.pendingScanRaw?.let(::scanNow)
                 }
                 .onFailure(::handleFailure)
         }
@@ -116,20 +117,20 @@ class PangguaiViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun onScanned(raw: String?) {
-        val nqt = PangguaiApi.extractNqt(raw)
-        if (nqt.isNullOrBlank()) {
+        val source = raw?.trim()?.takeIf(String::isNotBlank)
+        if (source == null) {
             _state.update {
-                it.copy(message = "没有识别到胖乖设备码 NQT")
+                it.copy(message = "没有识别到胖乖设备码")
             }
             return
         }
         _state.update {
             it.copy(
-                pendingNqt = nqt,
+                pendingScanRaw = source,
                 message = if (it.loggedIn) null else "登录后将自动打开该设备",
             )
         }
-        if (_state.value.loggedIn) scanNow(nqt)
+        if (_state.value.loggedIn) scanNow(source)
     }
 
     fun openDevice(goodsId: Int) {
@@ -152,7 +153,7 @@ class PangguaiViewModel(app: Application) : AndroidViewModel(app) {
                         busy = null,
                         selectedDevice = device,
                         skus = skus,
-                        pendingNqt = null,
+                        pendingScanRaw = null,
                     )
                 }
             }.onFailure(::handleFailure)
@@ -175,14 +176,75 @@ class PangguaiViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(message = null) }
     }
 
-    private fun scanNow(nqt: String) {
+    fun consumeExternalLaunchUrl() {
+        _state.update { it.copy(externalLaunchUrl = null) }
+    }
+
+    fun onExternalLaunchFailed(message: String) {
+        _state.update {
+            it.copy(
+                busy = null,
+                pendingScanRaw = null,
+                message = message,
+            )
+        }
+    }
+
+    private fun scanNow(source: String) {
         val token = _state.value.token ?: return
         viewModelScope.launch {
             _state.update { it.copy(busy = "正在识别设备", message = null) }
-            runCatching { api.scanDevice(nqt, token) }
-                .onSuccess { goodsId ->
-                    _state.update { it.copy(busy = null, pendingNqt = null) }
-                    openDevice(goodsId)
+            val deviceCode = PangguaiApi.extractDeviceCode(source)
+            if (deviceCode != null) {
+                runCatching { api.scanDevice(deviceCode.key, deviceCode.value, token) }
+                    .onSuccess { result ->
+                        val target = result.alipayTarget()
+                        if (target != null) {
+                            _state.update {
+                                it.copy(
+                                    busy = null,
+                                    pendingScanRaw = null,
+                                    externalLaunchUrl = target,
+                                )
+                            }
+                        } else {
+                            val goodsId = result.id.toIntOrNull()
+                            if (goodsId == null || goodsId <= 0) {
+                                _state.update {
+                                    it.copy(
+                                        busy = null,
+                                        pendingScanRaw = null,
+                                        message = "扫码结果缺少可用设备编号",
+                                    )
+                                }
+                            } else {
+                                _state.update { it.copy(busy = null, pendingScanRaw = null) }
+                                openDevice(goodsId)
+                            }
+                        }
+                    }
+                    .onFailure(::handleFailure)
+                return@launch
+            }
+            runCatching { api.resolveExternalTarget(source, token) }
+                .onSuccess { targetUrl ->
+                    if (!PangguaiApi.isSupportedAlipayTarget(targetUrl)) {
+                        _state.update {
+                            it.copy(
+                                busy = null,
+                                pendingScanRaw = null,
+                                message = "设备已识别，但返回的跳转方式暂不支持",
+                            )
+                        }
+                        return@onSuccess
+                    }
+                    _state.update {
+                        it.copy(
+                            busy = null,
+                            pendingScanRaw = null,
+                            externalLaunchUrl = targetUrl,
+                        )
+                    }
                 }
                 .onFailure(::handleFailure)
         }

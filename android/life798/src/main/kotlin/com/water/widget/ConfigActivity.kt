@@ -42,6 +42,7 @@ class ConfigActivity : ComponentActivity() {
     companion object {
         const val EXTRA_OPEN_WATER_RECOVERY = "com.water.widget.EXTRA_OPEN_WATER_RECOVERY"
         const val EXTRA_HIDE_MINE = "com.water.widget.EXTRA_HIDE_MINE"
+        const val EXTRA_HIDE_HOST_META = "com.water.widget.EXTRA_HIDE_HOST_META"
         const val EXTRA_THEME_MODE = "com.water.widget.EXTRA_THEME_MODE"
     }
 
@@ -114,6 +115,7 @@ class ConfigActivity : ComponentActivity() {
                         runWithNotificationPermission { startDevice(deviceId) }
                     },
                     showMineTab = !intent.getBooleanExtra(EXTRA_HIDE_MINE, false),
+                    showMineHostMeta = !intent.getBooleanExtra(EXTRA_HIDE_HOST_META, false),
                     glassEnabled = GlassPreferences.isEnabled(this),
                     onHostBack = ::finish
                 )

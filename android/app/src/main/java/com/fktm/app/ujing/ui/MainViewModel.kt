@@ -1529,12 +1529,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun startWash(command: String = NordicCommand.START_WASH) {
         val d = _device.value
         if (!d.valid) { _toast.value = "尚未绑定设备"; return }
-        if (!d.bleReady) {
-            _toast.value = "设备蓝牙地址尚未同步，请点击右上角刷新后再试"
-            log("拒绝启动：设备 ${d.deviceId} 缺少 MAC，先刷新设备详情")
-            return
-        }
-        if (!ModuleType.supportsBle(d.moduleType)) {
+        if (d.moduleType >= 0 && !ModuleType.supportsBle(d.moduleType)) {
             _toast.value = "该设备模块(${d.moduleType})不支持蓝牙直连"
             return
         }
@@ -1553,23 +1548,109 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             log("拒绝启动：订单 ${o.orderId} 已在运行（status=${o.status} $tail）")
             return
         }
+        _toast.value = "正在连接洗衣机，请保持蓝牙和网络开启"
+        log(
+            "点击启动：device=${d.deviceId} macReady=${d.bleReady} " +
+                "module=${d.moduleType} orderLength=${_orderId.value.length}"
+        )
         viewModelScope.launch {
             // 「启动中…」过渡态：蓝牙连接 + 上报 + 写指令通常要几秒，
             // 这段时间按钮必须锁住，否则用户会连点、重复上报（服务端会静默拒绝）。
             _starting.value = true
-            _busy.value = "蓝牙连接中"
+            _busy.value = if (d.bleReady) "蓝牙连接中" else "正在同步蓝牙地址"
             try {
-                when (d.moduleType) {
-                    ModuleType.TYPE_BLE_NORDIC -> runNordicStart(d, command)
-                    ModuleType.TYPE_BLE_CYPRESS -> runCypressStart(d, command)
-                    else -> {
-                        _toast.value = "模块 ${d.moduleType} 暂不支持蓝牙直连"
-                        log("不支持的模块类型 ${d.moduleType}")
-                    }
-                }
+                val orderId = _orderId.value
+                val paidOrder = confirmOrderReadyForBle(orderId) ?: return@launch
+                _order.value = paidOrder
+                val ready = ensureBleReadyDevice(d) ?: return@launch
+                _busy.value = "蓝牙连接中"
+                runStartWithDevice(ready, command)
             } finally {
                 _starting.value = false
                 _busy.value = null
+            }
+        }
+    }
+
+    /** 启动前再次确认订单已经付款，避免刚返回 App 时服务端状态尚未同步。 */
+    private suspend fun confirmOrderReadyForBle(orderId: String): OrderData? {
+        repeat(5) { attempt ->
+            when (val lookup = queryPaymentOrder(orderId)) {
+                is PaymentOrderLookup.Failed -> {
+                    logOrderQueryFailure("BLE启动前", lookup.error)
+                    _toast.value = "暂时无法确认订单状态，请检查网络后重试"
+                    return null
+                }
+                is PaymentOrderLookup.Found -> {
+                    val order = lookup.order
+                    if (order.running) {
+                        _paid.value = true
+                        val tail = order.remainText.ifBlank { order.statusRemark.orEmpty() }
+                        _toast.value = "订单已在运行中${if (tail.isBlank()) "" else "（$tail）"}"
+                        return null
+                    }
+                    if (order.payFlag == 1 || order.status == WasherStatus.PAID ||
+                        order.status == WasherStatus.STARTING
+                    ) {
+                        return order
+                    }
+                    val waitingForServer = order.status in setOf(
+                        WasherStatus.RESERVED,
+                        WasherStatus.PAYING,
+                    )
+                    if (!waitingForServer) {
+                        _toast.value = "当前订单不可启动，请重新下单"
+                        log("BLE 启动前订单状态异常：status=${order.status} payFlag=${order.payFlag}")
+                        return null
+                    }
+                }
+            }
+            if (attempt < 4) {
+                _toast.value = "正在确认支付状态，请稍候"
+                delay(1_200)
+            }
+        }
+        _toast.value = "支付状态尚未确认，请稍后再次点击启动"
+        return null
+    }
+
+    private suspend fun ensureBleReadyDevice(device: SavedDevice): SavedDevice? {
+        if (device.bleReady && ModuleType.supportsBle(device.moduleType)) return device
+        log(
+            "设备 ${device.deviceId} 的蓝牙信息未就绪" +
+                "（macReady=${device.bleReady} module=${device.moduleType}），启动前自动刷新"
+        )
+        _toast.value = "正在自动同步设备蓝牙信息"
+        val program = runCatching { api.programInfo(device.deviceId) }
+            .onFailure(::error)
+            .getOrNull()
+            ?.data
+        if (program != null) {
+            _program.value = program
+            val merged = device.copy(
+                storeId = program.storeId.ifBlank { device.storeId },
+                macAddress = program.macAddress.ifBlank { device.macAddress },
+                deviceTypeId = if (program.deviceTypeId != 0) program.deviceTypeId else device.deviceTypeId,
+                deviceNo = program.deviceNo,
+                storeName = program.storeName,
+                moduleType = if (program.moduleType >= 0) program.moduleType else device.moduleType,
+            )
+            _device.value = merged
+            store.saveDevice(merged)
+            if (merged.bleReady) return merged
+        }
+        _toast.value = "设备信息中没有蓝牙地址，请靠近洗衣机后点右上角刷新"
+        log("启动中止：自动刷新后仍缺少 MAC，device=${device.deviceId}")
+        return null
+    }
+
+    private suspend fun runStartWithDevice(device: SavedDevice, command: String) {
+        when (device.moduleType) {
+            ModuleType.TYPE_BLE_NORDIC -> runNordicStart(device, command)
+            ModuleType.TYPE_BLE_CYPRESS -> runCypressStart(device, command)
+            else -> {
+                _toast.value = "模块 ${device.moduleType} 暂不支持蓝牙直连"
+                log("不支持的模块类型 ${device.moduleType}")
             }
         }
     }

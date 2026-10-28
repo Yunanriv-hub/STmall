@@ -307,7 +307,7 @@ fun UjingFeatureScreen(
             hostState = snackbar,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(16.dp),
+                .padding(start = 16.dp, end = 16.dp, bottom = 108.dp),
         )
     }
 
@@ -740,7 +740,7 @@ private fun WashAction(vm: MainViewModel) {
         }
 
         paid || (hasOrder && order?.payFlag == 1) -> {
-            Button(onClick = vm::startWash, modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = { vm.startWash() }, modifier = Modifier.fillMaxWidth()) {
                 Icon(painterResource(R.drawable.ic_bluetooth), contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text("蓝牙启动洗衣机")

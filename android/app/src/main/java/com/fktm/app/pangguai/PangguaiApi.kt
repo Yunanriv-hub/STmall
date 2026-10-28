@@ -10,6 +10,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URI
 import java.net.URLDecoder
+import java.net.URLEncoder
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
@@ -55,6 +56,36 @@ data class PangguaiOrder(
     val minutes: Int,
 )
 
+data class PangguaiScanCode(
+    val key: String,
+    val value: String,
+)
+
+data class PangguaiScanResult(
+    val id: String,
+    val jumpToAlipayFlag2: Boolean,
+    val jumpToDevicePageFlag: Boolean,
+    val deviceParams: String,
+) {
+    /**
+     * 原版吹风机等非 Native 设备在 scanV2 后直接唤起支付宝小程序。
+     * 目标地址按原版页面和参数拼装，不经过网页重定向。
+     */
+    fun alipayTarget(): String? = when {
+        jumpToDevicePageFlag -> {
+            val query = URLEncoder.encode(
+                "$deviceParams&fromApp=1&&keepUsing=1",
+                Charsets.UTF_8.name(),
+            )
+            "alipays://platformapi/startapp?appId=2018072460764274" +
+                "&page=pages/skipNew/skipNew&query=$query"
+        }
+        jumpToAlipayFlag2 ->
+            "alipayqr://platformapi/startapp?saId=10000007"
+        else -> null
+    }
+}
+
 class PangguaiApiException(
     val code: Int,
     override val message: String,
@@ -84,16 +115,69 @@ class PangguaiApi(
         const val CHANNEL = "android_app"
 
         fun extractNqt(raw: String?): String? {
-            val value = raw?.trim()?.takeIf(String::isNotEmpty) ?: return null
-            val query = runCatching { URI(value).rawQuery }.getOrNull() ?: return null
-            return query.split('&').firstNotNullOfOrNull { pair ->
-                val key = pair.substringBefore('=', "")
-                if (!key.equals("NQT", ignoreCase = true)) return@firstNotNullOfOrNull null
-                val encoded = pair.substringAfter('=', "").takeIf(String::isNotBlank)
-                    ?: return@firstNotNullOfOrNull null
-                URLDecoder.decode(encoded, Charsets.UTF_8.name()).takeIf(String::isNotBlank)
-            }
+            return extractDeviceCode(raw)
+                ?.takeIf { it.key == "NQT" }
+                ?.value
         }
+
+        /**
+         * 原版同时接受 NQT、IMEI、SN 三种设备码。
+         * 吹风机等其他设备常使用普通链接或专用二维码，由服务端
+         * `common/charge/url` 再解析成支付宝目标地址。
+         */
+        fun extractDeviceCode(raw: String?): PangguaiScanCode? {
+            val value = raw?.trim()?.takeIf(String::isNotEmpty) ?: return null
+            val query = runCatching { URI(value).rawQuery }.getOrNull()
+                ?: value.takeIf { '=' in it && "://" !in it }
+                ?: return null
+            val pairs = query.split('&').mapNotNull { pair ->
+                val separator = pair.indexOf('=')
+                if (separator <= 0) return@mapNotNull null
+                val key = pair.substring(0, separator)
+                val encoded = pair.substring(separator + 1)
+                val decoded = runCatching {
+                    URLDecoder.decode(encoded, Charsets.UTF_8.name())
+                }.getOrNull().orEmpty()
+                key to decoded
+            }
+            val key = listOf("NQT", "IMEI", "SN").firstOrNull { expected ->
+                pairs.any { (name, rawValue) ->
+                    name.equals(expected, ignoreCase = true) && rawValue.isNotBlank()
+                }
+            } ?: return null
+            val decoded = pairs.first { (name, _) -> name.equals(key, ignoreCase = true) }.second
+            return PangguaiScanCode(key = key, value = decoded)
+        }
+
+        fun isSupportedAlipayTarget(raw: String?): Boolean {
+            val value = raw?.trim()?.takeIf(String::isNotEmpty) ?: return false
+            return runCatching {
+                val uri = URI(value)
+                uri.scheme.orEmpty().lowercase() in setOf("alipays", "alipay", "alipayqr") &&
+                    uri.host.equals("platformapi", ignoreCase = true) &&
+                    uri.path.orEmpty().startsWith("/startapp", ignoreCase = true)
+            }.getOrDefault(false)
+        }
+    }
+
+    /**
+     * 原版对无法直接识别的二维码调用 `common/charge/url`，
+     * 返回 `data.targetUrl` 后交给对应 App。吹风机扫码即走此路径。
+     */
+    suspend fun resolveExternalTarget(sourceUrl: String, token: String): String {
+        val response = post(
+            path = "/common/charge/url",
+            token = token,
+            fields = mapOf(
+                "sourceUrl" to sourceUrl,
+                "token" to token,
+            ),
+        )
+        return ensureSuccess(response)
+            .optJSONObject("data")
+            ?.text("targetUrl")
+            ?.takeIf(String::isNotBlank)
+            ?: throw PangguaiApiException(-1, "服务端未返回可打开的支付宝地址")
     }
 
     private val client = OkHttpClient.Builder()
@@ -169,21 +253,28 @@ class PangguaiApi(
         }.filter { it.goodsId > 0 }
     }
 
-    suspend fun scanDevice(nqt: String, token: String): Int {
+    suspend fun scanDevice(nqt: String, token: String): PangguaiScanResult =
+        scanDevice("NQT", nqt, token)
+
+    suspend fun scanDevice(key: String, value: String, token: String): PangguaiScanResult {
         val response = post(
             path = "/goods/scan/v2",
             token = token,
             fields = mapOf(
-                "NQT" to nqt,
+                key to value,
                 "token" to token,
             ),
         )
-        val rawId = ensureSuccess(response)
-            .optJSONObject("data")
-            ?.text("id")
-            .orEmpty()
-        return rawId.toIntOrNull()
-            ?: throw PangguaiApiException(-1, "扫码结果不是有效设备")
+        val data = ensureSuccess(response).optJSONObject("data")
+            ?: throw PangguaiApiException(-1, "扫码结果为空")
+        return PangguaiScanResult(
+            id = data.text("id"),
+            jumpToAlipayFlag2 = data.optBoolean("jumpToAlipayFlag2"),
+            jumpToDevicePageFlag = data.optBoolean("jumpToDevicePageFlag"),
+            deviceParams = "$key=$value",
+        ).takeIf {
+            it.alipayTarget() != null || it.id.toIntOrNull()?.let { id -> id > 0 } == true
+        } ?: throw PangguaiApiException(-1, "扫码结果不是有效设备")
     }
 
     suspend fun deviceDetail(goodsId: Int, token: String): PangguaiDevice {

@@ -107,6 +107,7 @@ class UjingModelsTest {
     fun rejectsUntrustedAlipayLikeSchemes() {
         assertTrue(isTrustedAlipayDeepLink("alipays://platformapi/startapp?x=1"))
         assertTrue(isTrustedAlipayDeepLink("alipay://platformapi/startApp?x=1"))
+        assertTrue(isTrustedAlipayDeepLink("alipayqr://platformapi/startapp?saId=10000007"))
         assertFalse(isTrustedAlipayDeepLink("alipays://evil.example/startapp?x=1"))
         assertFalse(isTrustedAlipayDeepLink("alipays://platformapi/other?x=1"))
         assertFalse(isTrustedAlipayDeepLink("other://platformapi/startapp?x=1"))
