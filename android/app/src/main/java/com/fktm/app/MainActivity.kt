@@ -2,7 +2,10 @@ package com.fktm.app
 
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -10,6 +13,9 @@ import androidx.activity.viewModels
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -17,6 +23,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.graphics.drawable.IconCompat
 import androidx.core.view.WindowCompat
 import com.fktm.app.ble.BleLockClient
 import com.fktm.app.ui.CampusLiteApp
@@ -39,6 +48,7 @@ class MainActivity : ComponentActivity() {
     private val waterVm: WaterViewModel by viewModels()
     private var pendingAutoUnlock = false
     private var backgroundImageUri by mutableStateOf<String?>(null)
+    private var showBatteryPrompt by mutableStateOf(false)
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
@@ -74,6 +84,16 @@ class MainActivity : ComponentActivity() {
         val app = application as FktmApp
         backgroundImageUri = app.preferences.backgroundImageUri
 
+        // 桌面「一键打开宿舍门」快捷方式在每次启动时重新推送一遍：
+        // 覆盖安装 / 改名（STmall → Cumpus）后，桌面缓存的那份可能已经失效，
+        // ColorOS 点旧快捷方式会提示「应用数据读取失败，无法启动应用」。
+        // 动态推送同 id 会原地刷新（已固定的快捷方式同样按 id 更新）。
+        refreshUnlockShortcut()
+
+        // ColorOS 会把不常驻后台的应用「速冻」，被冻住后快捷方式/磁贴可能拉起失败。
+        // 安装后第一次启动时询问一次是否加入电池优化白名单（系统弹窗，用户决定）。
+        maybePromptBatteryWhitelist(app)
+
         setContent {
             var themeMode by remember { mutableStateOf(app.preferences.themeMode) }
             var glassEnabled by remember { mutableStateOf(app.preferences.liquidGlassEnabled) }
@@ -95,12 +115,38 @@ class MainActivity : ComponentActivity() {
             }
 
             FktmTheme(themeMode = themeMode) {
+                if (showBatteryPrompt) {
+                    AlertDialog(
+                        onDismissRequest = { showBatteryPrompt = false },
+                        title = { Text("允许后台运行") },
+                        text = {
+                            Text(
+                                "ColorOS 会把不常用的应用「速冻」，被冻结后「一键打开宿舍门」" +
+                                    "快捷方式和下拉磁贴可能无法启动应用。\n\n" +
+                                    "建议在接下来的系统页面里把 Cumpus 设为「允许」，" +
+                                    "保证快捷开锁随时可用。"
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                showBatteryPrompt = false
+                                openBatteryWhitelist()
+                            }) { Text("去设置") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showBatteryPrompt = false }) {
+                                Text("以后再说")
+                            }
+                        },
+                    )
+                }
                 CampusLiteApp(
                     lockVm = lockVm,
                     waterVm = waterVm,
                     onRequestBlePermissions = ::ensureBluetoothPermissions,
                     onEnsureNotificationPermission = ::ensureNotificationPermission,
                     onQuickUnlock = ::requestQuickUnlock,
+                    onOpenBatterySettings = ::openBatteryWhitelist,
                     themeMode = themeMode,
                     darkTheme = darkTheme,
                     glassEnabled = glassEnabled,
@@ -192,4 +238,53 @@ class MainActivity : ComponentActivity() {
 
     private fun hasBluetoothPermissions(): Boolean =
         BleLockClient(this).hasPermissions()
+
+    /**
+     * 每次启动重新推送「一键打开宿舍门」快捷方式。
+     *
+     * 覆盖安装、应用改名后，桌面缓存的那份静态快捷方式可能指向旧状态；
+     * 动态推送同 id 会原地刷新（固定的快捷方式同样按 id 更新），
+     * 避免 ColorOS 点旧快捷方式时提示「应用数据读取失败，无法启动应用」。
+     */
+    private fun refreshUnlockShortcut() {
+        runCatching {
+            val shortcut = ShortcutInfoCompat.Builder(this, "unlock")
+                .setShortLabel(getString(R.string.shortcut_unlock_short))
+                .setLongLabel(getString(R.string.shortcut_unlock_long))
+                .setIcon(IconCompat.createWithResource(this, R.drawable.ic_tile_unlock))
+                .setIntent(
+                    Intent(this, MainActivity::class.java).apply {
+                        action = Intent.ACTION_VIEW
+                        data = Uri.parse("fktm://unlock")
+                    }
+                )
+                .build()
+            ShortcutManagerCompat.pushDynamicShortcut(this, shortcut)
+        }
+    }
+
+    /**
+     * 安装后只弹一次的「允许后台运行」引导（ColorOS 速冻是快捷方式/磁贴
+     * 启动失败的头号原因；加入电池白名单后系统不再冻结本应用）。
+     */
+    private fun maybePromptBatteryWhitelist(app: FktmApp) {
+        val pm = getSystemService(PowerManager::class.java)
+        val ignoring = runCatching { pm.isIgnoringBatteryOptimizations(packageName) }.getOrDefault(false)
+        if (ignoring) return
+        if (app.preferences.batteryPromptShown) return
+        app.preferences.batteryPromptShown = true
+        showBatteryPrompt = true
+    }
+
+    /** 打开系统「电池优化白名单」页面（用户手动确认允许）。 */
+    private fun openBatteryWhitelist() {
+        runCatching {
+            startActivity(
+                Intent(
+                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    Uri.parse("package:$packageName"),
+                )
+            )
+        }
+    }
 }

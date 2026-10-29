@@ -54,6 +54,11 @@ class AppPreferences(context: Context) {
             else putString(KEY_BACKGROUND_IMAGE_URI, value)
         }.apply()
 
+    /** 「允许后台运行」引导是否已经弹过（每个安装只弹一次）。 */
+    var batteryPromptShown: Boolean
+        get() = prefs.getBoolean(KEY_BATTERY_PROMPT_SHOWN, false)
+        set(value) = prefs.edit().putBoolean(KEY_BATTERY_PROMPT_SHOWN, value).apply()
+
     fun enabledHomeModules(): Set<String> {
         val saved = prefs.getStringSet(KEY_ENABLED_HOME_MODULES, null)
         if (saved == null) {
@@ -174,5 +179,6 @@ class AppPreferences(context: Context) {
         private const val KEY_UJING_FREE_ONLY = "ujing_free_only"
         private const val KEY_UJING_SORT_MODE = "ujing_sort_mode"
         private const val KEY_BACKGROUND_IMAGE_URI = "background_image_uri"
+        private const val KEY_BATTERY_PROMPT_SHOWN = "battery_prompt_shown"
     }
 }

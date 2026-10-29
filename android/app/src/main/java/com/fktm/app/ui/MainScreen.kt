@@ -427,7 +427,7 @@ private fun StatusText(text: String, success: Boolean, dim: Boolean = false) {
 
 private sealed interface GrabState {
     data object Idle : GrabState
-    data object Running : GrabState
+    data class Running(val msg: String = "正在后台监听日志") : GrabState
     data class Info(val msg: String) : GrabState
     data class Error(val msg: String) : GrabState
 }
@@ -461,7 +461,7 @@ private fun AutoGrabSection(
         while (true) {
             delay(1_000)
             var hit = ShizukuLogcatGrabber.consumeHit(context)
-            if (hit == null && state == GrabState.Running) {
+            if (hit == null && state is GrabState.Running) {
                 remotePollTick++
                 if (remotePollTick % 2 == 0) {
                     hit = ShizukuLogcatGrabber.consumeRemoteHit(context)
@@ -511,7 +511,9 @@ private fun AutoGrabSection(
             return
         }
         applied = false
-        state = GrabState.Running
+        state = GrabState.Running(
+            "正在启动抓取服务 —— 之后切到天猫校园在门口开一次锁，开完回本 App 自动填入。"
+        )
         scope.launch {
             // 抓取要求用户切到天猫校园开锁 → TmallKey 全程在后台，而 ColorOS 会冻结后台进程。
             // 起前台服务提高优先级（能拖住一些时间），但**不能指望它挡住冻结** ——
@@ -526,6 +528,10 @@ private fun AutoGrabSection(
                     ShizukuLogcatGrabber.Result.Failed("尚未开始")
                 val attempts = intArrayOf(60_000, 90_000, 240_000)
                 for ((index, timeoutMs) in attempts.withIndex()) {
+                    state = GrabState.Running(
+                        "第 ${index + 1}/${attempts.size} 轮监听中 —— 现在去天猫校园点一次开锁，" +
+                            "开完回本 App 即自动填入。"
+                    )
                     result = ShizukuLogcatGrabber.capture(context, timeoutMs)
                     if (result is ShizukuLogcatGrabber.Result.Found ||
                         result is ShizukuLogcatGrabber.Result.PermissionDenied ||
@@ -579,13 +585,12 @@ private fun AutoGrabSection(
 
             when (val s = state) {
                 GrabState.Idle -> {}
-                GrabState.Running -> {
+                is GrabState.Running -> {
                     Spacer(Modifier.height(10.dp))
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        "正在后台监听日志 —— 现在去天猫校园点一次开锁，" +
-                            "开完回到本 App 即会自动填入（低性能设备会自动重试）。",
+                        s.msg,
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.primary,
                     )
@@ -603,9 +608,9 @@ private fun AutoGrabSection(
             Spacer(Modifier.height(10.dp))
             OutlinedButton(
                 onClick = { start() },
-                enabled = state != GrabState.Running,
+                enabled = state !is GrabState.Running,
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text(if (state == GrabState.Running) "抓取中…" else "开始抓取") }
+            ) { Text(if (state is GrabState.Running) "抓取中…" else "开始抓取") }
         }
     }
 }

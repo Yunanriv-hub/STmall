@@ -115,6 +115,59 @@ class LogcatParserTest {
     }
 
     @Test
+    fun `parses the -v epoch prefix the grabber now produces`() {
+        // -v epoch 行首是 <秒>.<毫秒> D/Tag(pid): ...
+        val raw = "1793164293.123  1234  1234 D/VocLockHelperV2(1234): " +
+            "unlock: macAddress: $fakeMac activationKey: $fakeKey"
+
+        val hit = LogcatParser.parse(raw)
+
+        assertEquals(fakeKey, hit?.activationKey)
+        assertEquals(fakeMac, hit?.macAddress)
+    }
+
+    @Test
+    fun `accepts underscore separator`() {
+        val hit = LogcatParser.parse(line("activation_key: $fakeKey"))
+
+        assertEquals(fakeKey, hit?.activationKey)
+    }
+
+    @Test
+    fun `accepts json style with quotes`() {
+        val raw = "10-11 18:15:03.123  4821  4865 I Logger: " +
+            "{\"activationKey\":\"$fakeKey\",\"macAddress\":\"$fakeMac\"}"
+
+        val hit = LogcatParser.parse(raw)
+
+        assertEquals(fakeKey, hit?.activationKey)
+        assertEquals(fakeMac, hit?.macAddress)
+        assertTrue(hit!!.isComplete)
+    }
+
+    @Test
+    fun `accepts single quotes and equals separator`() {
+        val hit = LogcatParser.parse("activationKey='$fakeKey' macAddress='$fakeMac'")
+
+        assertEquals(fakeKey, hit?.activationKey)
+        assertEquals(fakeMac, hit?.macAddress)
+    }
+
+    @Test
+    fun `accepts legacy lockKey field name`() {
+        val hit = LogcatParser.parse(line("lockKey: $fakeKey"))
+
+        assertEquals(fakeKey, hit?.activationKey)
+    }
+
+    @Test
+    fun `accepts uppercase field names`() {
+        val hit = LogcatParser.parse(line("ACTIVATIONKEY: $fakeKey"))
+
+        assertEquals(fakeKey, hit?.activationKey)
+    }
+
+    @Test
     fun `empty input yields null`() {
         assertNull(LogcatParser.parse(""))
     }

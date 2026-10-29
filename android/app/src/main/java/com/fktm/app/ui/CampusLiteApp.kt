@@ -273,6 +273,7 @@ fun CampusLiteApp(
     onRequestBlePermissions: () -> Unit,
     onEnsureNotificationPermission: () -> Unit,
     onQuickUnlock: () -> Unit,
+    onOpenBatterySettings: () -> Unit = {},
     themeMode: ThemeMode,
     darkTheme: Boolean,
     glassEnabled: Boolean,
@@ -611,6 +612,7 @@ fun CampusLiteApp(
                     backgroundImageUri = backgroundImageUri,
                     onPickBackgroundImage = onPickBackgroundImage,
                     onClearBackgroundImage = onClearBackgroundImage,
+                    onOpenBatterySettings = onOpenBatterySettings,
                     onBack = { page = settingsOrigin },
                 )
             }
@@ -2561,6 +2563,7 @@ private fun SettingsScreen(
     backgroundImageUri: String?,
     onPickBackgroundImage: () -> Unit,
     onClearBackgroundImage: () -> Unit,
+    onOpenBatterySettings: () -> Unit,
     onBack: () -> Unit,
 ) {
     Column(
@@ -2709,6 +2712,20 @@ private fun SettingsScreen(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
                     )
                 }
+            }
+        }
+
+        SettingsCard(
+            title = "后台与冻结",
+            subtitle = "ColorOS 会把不常用应用「速冻」，导致快捷开锁无法启动。建议加入电池优化白名单。",
+        ) {
+            OutlinedButton(
+                onClick = onOpenBatterySettings,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+            ) {
+                Text("允许后台运行（防冻结）")
             }
         }
 

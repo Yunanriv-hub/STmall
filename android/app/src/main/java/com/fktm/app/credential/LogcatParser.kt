@@ -18,6 +18,22 @@ object LogcatParser {
     /** 对应 logparse.py: `macAddress[:=]\s*([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5})` */
     private val RE_MAC = Regex("""macAddress[:=]\s*([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5})""")
 
+    /**
+     * 宽松匹配 —— 官方不同版本/不同打点处的写法并不固定：
+     *   · `activationKey` / `activation_key` / `activation-key` / `activation key`
+     *   · 分隔符 `:` 或 `=`，值两侧可能带引号（JSON 风格）
+     *   · 偶尔写 `lockKey` / `openKey`（老版本 VocLockHelper 字段名）
+     * 真机多次出现「抓取成功率低」，原因之一就是这几类写法没被第一版正则覆盖。
+     */
+    private val RE_KEY_RELAXED = Regex(
+        """(?i)(?:activation[_ \-]?key|lockKey|openKey)["']?\s*[:=]\s*["']?([0-9a-f]{32})"""
+    )
+
+    /** MAC 的宽松写法：带引号、`=` 分隔。 */
+    private val RE_MAC_RELAXED = Regex(
+        """(?i)macAddress["']?\s*[:=]\s*["']?([0-9a-f]{2}(?::[0-9a-f]{2}){5})"""
+    )
+
     data class Hit(
         val activationKey: String,
         val macAddress: String?,
@@ -41,10 +57,14 @@ object LogcatParser {
         var lastMac: String? = null
 
         for (line in text.lineSequence()) {
-            RE_MAC.find(line)?.groupValues?.get(1)?.let { lastMac = it.uppercase() }
-            val key = RE_KEY.find(line)?.groupValues?.get(1) ?: continue
-            val mac = RE_MAC.find(line)?.groupValues?.get(1)?.uppercase() ?: lastMac
-            hit = Hit(key.uppercase(), mac, line.trim())
+            val mac = RE_MAC.find(line)?.groupValues?.get(1)
+                ?: RE_MAC_RELAXED.find(line)?.groupValues?.get(1)
+            mac?.let { lastMac = it.uppercase() }
+            val key = RE_KEY.find(line)?.groupValues?.get(1)
+                ?: RE_KEY_RELAXED.find(line)?.groupValues?.get(1)
+                ?: continue
+            val macHere = mac?.uppercase() ?: lastMac
+            hit = Hit(key.uppercase(), macHere, line.trim())
         }
         return hit
     }

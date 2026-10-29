@@ -22,6 +22,8 @@
          否则会被 ColorOS 之类的系统冻结，Shizuku 的 binder 回调直接断掉。 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- 引导用户把本应用加入电池优化白名单（ColorOS 速冻是快捷方式/磁贴启动失败的头号原因） -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!-- 检查更新需要联网。注意：**开锁全程不联网**，这里只为更新功能而申请。 -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -119,15 +121,14 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- 桌面快捷方式：一键开锁 -->
+            <!-- 桌面快捷方式：一键开锁。
+                 改为运行时动态推送（MainActivity.refreshUnlockShortcut），
+                 每次启动原地刷新，避免覆盖安装/改名后旧快捷方式失效。 -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:scheme="fktm" android:host="unlock" />
             </intent-filter>
-            <meta-data
-                android:name="android.app.shortcuts"
-                android:resource="@xml/shortcuts" />
         </activity>
 
         <!-- 下拉快捷磁贴：一点开锁 -->

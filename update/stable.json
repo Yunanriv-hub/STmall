@@ -1,10 +1,10 @@
 {
   "channel": "stable",
-  "versionName": "0.6.11",
-  "versionCode": 36,
+  "versionName": "0.6.12",
+  "versionCode": 37,
   "isReady": false,
   "minVersionCode": 1,
-  "releaseNotes": "Cumpus 0.6.11：隐藏慧生活设备页多余的开发者入口；胖乖生活按原版支持 NQT、IMEI、SN 和吹风机支付宝小程序分流；U净自动补齐蓝牙信息、校验写入结果与收尾上报，改善支付后启动无反馈问题。项目继续只通过本地 APK 分发。",
+  "releaseNotes": "Cumpus 0.6.12：修复快捷开门偶发提示「应用数据读取失败」——快捷方式动态刷新、磁贴解锁后启动并带失败回退，首次启动引导加入电池白名单防 ColorOS 速冻；钥匙站抓取成功率大幅提高——回看 3 分钟不再清缓冲、多缓冲监听、更宽匹配、TLog 兜底与多轮进度提示。项目继续只通过本地 APK 分发。",
   "releaseUrl": "",
   "assets": []
 }

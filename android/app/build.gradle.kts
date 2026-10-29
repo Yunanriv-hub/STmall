@@ -29,8 +29,8 @@ android {
         applicationId = "com.rea.campuslite"
         minSdk = 26
         targetSdk = 36
-        versionCode = 36
-        versionName = "0.6.11"
+        versionCode = 37
+        versionName = "0.6.12"
         buildConfigField(
             "String",
             "PANGGUAI_APP_SECRET",
@@ -53,8 +53,9 @@ android {
 
     buildTypes {
         release {
-            // The first build is a functional prototype. Keep symbols intact so
-            // BLE/Compose/reflection failures remain diagnosable on-device.
+            // 所有正式包（0.3.0 ~ 0.6.11）均未开启混淆，保持符号完整，
+            // 便于 BLE/Compose/反射问题在真机上可诊断。此前一次未提交的
+            // R8 实验会把 Compose UI 大量剪掉，已回退。
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
