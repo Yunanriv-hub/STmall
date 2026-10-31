@@ -6,18 +6,18 @@
   <p>面向校园高频场景的独立 Android 客户端</p>
 
   <p>
-    <strong>项目已暂时转为闭源，不再公开更新源码</strong> ·
+    <strong>GitHub 源码已公开 · 未启用代码混淆</strong> ·
     <a href="docs/USAGE.md">使用教程</a> ·
     <a href="docs/CHANGELOG.md">更新记录</a> ·
     <a href="DISCLAIMER.md">免责声明</a>
   </p>
 </div>
 
-> **闭源状态（2026-10-26）**
+> **源码公开状态（2026-10-31）**
 >
-> STmall 自有代码与项目材料暂时转为闭源，GitHub 仓库已设为私有并归档，
-> 不再通过公开 GitHub 仓库发布源码更新。已经发布的版本、第三方组件及其
-> 许可证不会因本次状态调整而失效。后续是否恢复公开由项目作者决定。
+> Cumpus 源码已重新发布到 GitHub，当前 Release 构建保持
+> `isMinifyEnabled = false`，不启用代码混淆。源码可见不代表放弃著作权；
+> 自有代码仍按 [LICENSE](LICENSE) 的专有许可提供，第三方组件继续遵循各自许可证。
 
 > **STmall 是非官方个人项目，与天猫、淘宝、阿里巴巴、慧生活798及其关联
 > 服务商没有隶属、授权或合作关系。请仅使用自己的账号，并只操作自己有权使用
@@ -187,16 +187,16 @@ android/app/build/outputs/apk/release/app-release.apk
 
 | 项目 | 值 |
 |---|---|
-| 版本 | `0.6.11` |
-| versionCode | `36` |
+| 版本 | `0.6.12` |
+| versionCode | `37` |
 | 包名 | `com.rea.campuslite` |
 | minSdk | `26` |
 | targetSdk | `36` |
-| Release APK | `Cumpus_0.6.11.apk` |
-| SHA-256 | `B9CA140EACAEFC660C05B2C456E55508C0C7BE272FFCD85E1B6A4D36A5ADB95E` |
+| Release APK | `Cumpus_0.6.12.apk` |
+| SHA-256 | `EECA6B8147E601EBEA2BE24BB1DCAFE3CF1660E2835A874635DE5927DA692550` |
 
-该版本已通过 299 项 JVM 单元测试、release 编译、Android Lint（0 Error，
-88 个既有 Warning）和 v2 签名校验。
+该版本已通过 305 项 JVM 单元测试、release 编译、Android Lint（0 Error，
+96 个既有 Warning）和 v2 签名校验。
 
 ## 兼容性说明
 
@@ -281,7 +281,7 @@ android/app/build/outputs/apk/release/app-release.apk
   许可文本见 [LICENSE-ujing-mini](LICENSE-ujing-mini)。STmall 未复制
   `DUT-Ujing` 的签名密钥、Web 服务或项目代码。
 - 第三方项目名称、商标和图标权利归各自权利人所有。
-- STmall 自有代码按照 [LICENSE](LICENSE) 作为专有、闭源软件保留全部权利；
+- STmall 自有代码按照 [LICENSE](LICENSE) 作为源码可见的专有软件保留全部权利；
   未经项目作者明确书面授权，不得复制、修改、再分发或商用。
 - 第三方许可见上列专用许可证文件；第三方许可不会授予 STmall 自有代码的使用权。
 

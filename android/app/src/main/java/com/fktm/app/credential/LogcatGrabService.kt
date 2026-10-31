@@ -259,7 +259,7 @@ class LogcatGrabService : ILogcatGrab.Stub() {
             tlogFilesScanned.incrementAndGet()
             val hit = runCatching {
                 val head = if (f.length() > TLOG_READ_BYTES) {
-                    f.inputStream().buffered().use { it.readNBytes(TLOG_READ_BYTES.toInt()) }
+                    readAtMost(f, TLOG_READ_BYTES)
                 } else {
                     f.readBytes()
                 }
@@ -270,6 +270,21 @@ class LogcatGrabService : ILogcatGrab.Stub() {
             return hit.sourceLine
         }
         return null
+    }
+
+    /** Android 8 compatible bounded read; [InputStream.readNBytes] is API 33+. */
+    private fun readAtMost(file: File, maxBytes: Long): ByteArray {
+        val limit = maxBytes.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
+        return file.inputStream().buffered().use { input ->
+            val buffer = ByteArray(limit)
+            var total = 0
+            while (total < limit) {
+                val count = input.read(buffer, total, limit - total)
+                if (count <= 0) break
+                total += count
+            }
+            if (total == buffer.size) buffer else buffer.copyOf(total)
+        }
     }
 
     /**

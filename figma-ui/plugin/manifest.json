@@ -1,0 +1,8 @@
+{
+  "name": "Cumpus UI Importer",
+  "id": "cumpus-ui-importer-local-0630",
+  "api": "1.0.0",
+  "main": "code.js",
+  "editorType": ["figma"],
+  "documentAccess": "dynamic-page"
+}
