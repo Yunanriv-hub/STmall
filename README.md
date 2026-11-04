@@ -1,3 +1,7 @@
+> **项目仓库迁移**
+>
+> 新版源码、安装包和后续更新已迁移到 **[Cumpus](https://github.com/Yunanriv-hub/Cumpus)**。
+> 原 STmall 仓库保持原样，继续作为历史版本保留。
 <div align="center">
   <img src="docs/images/stmall-icon.png" width="112" alt="STmall icon">
 
